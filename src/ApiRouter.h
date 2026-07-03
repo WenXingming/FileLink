@@ -18,6 +18,7 @@ private:
     // 各个具体路由的处理函数
     void handleHealth(const HttpRequest& req, HttpResponse& response);
     void handleUpload(const HttpRequest& req, HttpResponse& response);
+    void handleDownload(const HttpRequest& req, HttpResponse& response);
 
 private:
     HttpServer& server_;

@@ -22,6 +22,8 @@ public:
         const std::string& tempPath,
         const std::string& contentHash) const;
 
+    std::string getObjectPath(const std::string& contentHash) const;
+
 private:
     std::string storageRoot_;
 };

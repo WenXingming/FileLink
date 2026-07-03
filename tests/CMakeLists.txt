@@ -38,3 +38,13 @@ add_test(
         ${CURL_EXECUTABLE}
 )
 set_tests_properties(filelinkServerUploadCheck PROPERTIES TIMEOUT 10)
+
+add_test(
+    NAME filelinkServerDownloadCheck
+    COMMAND
+        ${BASH_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/DownloadTest.sh
+        $<TARGET_FILE:filelink-server>
+        ${CURL_EXECUTABLE}
+)
+set_tests_properties(filelinkServerDownloadCheck PROPERTIES TIMEOUT 10)

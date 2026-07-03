@@ -13,7 +13,8 @@
 为了贯彻“小步快跑”的增量开发原则，我们在第一阶段（MVP）采取妥协策略：
 - **暂不修改 Tudou 框架**，接受其内存全缓冲的限制。
 - 在 `FileLink` 的 `POST /upload` 接口中，取出完整的 `HttpRequest::get_body()`，一次性传给 `StreamUploader::appendChunk`。
-- **约束**：此阶段仅能用来测试和验证“小文件”的全链路（HTTP -> 暂存 -> 哈希 -> 落盘对象库）闭环正确性。
+- 在 `GET /objects/{hash}` 接口中，使用 `std::ifstream` 将整个文件一次性读入内存，再传递给 `HttpResponse::set_body()`。
+- **约束**：此阶段仅能用来测试和验证“小文件”的全链路（HTTP -> 暂存 -> 哈希 -> 落盘对象库 -> 下载）闭环正确性。
 
 ## 3. Tudou 框架重构计划 (Refactor TODO)
 将 Tudou 打造成支持**“流式路由 (Streaming Route)”**的现代网络框架，是后续的重要技术亮点，极其适合作为简历和面试中的硬核亮点。
@@ -31,7 +32,11 @@
    - 在流模式下，后续每次触发 `llhttp` 的 `on_body` 回调时，框架不再往 `std::string body_` 里无脑追加，而是直接调用业务层的流式回调句柄（把指针和长度透传过去）。
    - 业务层（如 FileLink）的流式句柄内部，实时调用 `StreamUploader::appendChunk`，实现大文件的高速落盘与哈希，彻底解放内存限制。
 
-4. **开源贡献与集成**
+4. **下载方向的零拷贝/流式响应支持**
+   - 扩充 `HttpResponse` 支持以文件描述符或分块流（Chunked Transfer）作为 Body 返回。
+   - 接入底层 Linux `sendfile` 系统调用，实现网卡级别的零拷贝下载，避免将文件内容拷贝进应用层内存。
+
+5. **开源贡献与集成**
    - 在本地 `Tudou` 源码完成改造和单元测试。
    - 推送至 GitHub `WenXingming/Tudou` 仓库，并将 `FileLink` 的 `CMakeLists.txt` 更新以拉取最新的 Tudou 框架版本。
 

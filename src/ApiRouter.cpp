@@ -6,6 +6,8 @@
 
 #include <chrono>
 #include <exception>
+#include <fstream>
+#include <sys/stat.h>
 #include <utility>
 
 namespace filelink {
@@ -23,6 +25,10 @@ void ApiRouter::registerRoutes() {
 
     server_.add_post_route("/upload", [this](const HttpRequest& req, HttpResponse& res) {
         this->handleUpload(req, res);
+    });
+
+    server_.add_prefix_route("/objects/", [this](const HttpRequest& req, HttpResponse& res) {
+        this->handleDownload(req, res);
     });
 }
 
@@ -57,6 +63,49 @@ void ApiRouter::handleUpload(const HttpRequest& req, HttpResponse& response) {
         std::string errorBody = std::string("{\"status\":\"error\",\"message\":\"") + ex.what() + "\"}";
         response = HttpResponse::plain_text(500, "Internal Server Error", errorBody);
         response.set_header("Content-Type", "application/json");
+    }
+}
+
+void ApiRouter::handleDownload(const HttpRequest& req, HttpResponse& response) {
+    if (req.get_method() != "GET") {
+        response = HttpResponse::plain_text(405, "Method Not Allowed", "Method Not Allowed\n");
+        return;
+    }
+
+    // 提取 hash: req.get_path() 会类似于 /objects/d74981efa70a0c880b8d8c1985d075dbcbf679b99a5f9914e5aaf96b831a9e24
+    const std::string prefix = "/objects/";
+    const std::string path = req.get_path();
+    if (path.size() <= prefix.size()) {
+        response = HttpResponse::plain_text(400, "Bad Request", "Missing Hash\n");
+        return;
+    }
+
+    std::string hash = path.substr(prefix.size());
+    try {
+        std::string objectPath = store_.getObjectPath(hash);
+        
+        // 检查文件是否存在
+        struct stat info;
+        if (::stat(objectPath.c_str(), &info) != 0) {
+            response = HttpResponse::plain_text(404, "Not Found", "Object Not Found\n");
+            return;
+        }
+
+        // 妥协版 MVP 读取策略：一次性读入内存
+        // TODO: 升级 Tudou 框架支持 sendfile 或流式写入 HTTP 响应
+        std::ifstream ifs(objectPath, std::ios::binary);
+        if (!ifs) {
+            response = HttpResponse::plain_text(500, "Internal Server Error", "Failed to open object\n");
+            return;
+        }
+        
+        std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+        response.set_status(200, "OK");
+        response.set_body(content);
+        response.set_header("Content-Type", "application/octet-stream");
+        response.set_header("Content-Length", std::to_string(content.size()));
+    } catch (const std::exception& ex) {
+        response = HttpResponse::plain_text(400, "Bad Request", std::string(ex.what()) + "\n");
     }
 }
 
