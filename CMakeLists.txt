@@ -12,19 +12,15 @@ option(FILELINK_BUILD_DEDUP_TOOL "构建离线去重命令行工具" ON)
 option(FILELINK_BUILD_TESTS "构建当前稳定模块的测试" OFF)
 option(FILELINK_BUILD_BENCHMARKS "构建当前稳定模块的性能基准" OFF)
 
-# dedup 引擎使用独立线程池执行文件扫描与哈希任务。
-if(NOT TARGET ThreadPool)
-    find_package(ThreadPool CONFIG QUIET)
-endif()
-
-if(NOT TARGET ThreadPool)
+# 离线文件去重引擎由独立的 FileSystemTools 提供。
+if(NOT TARGET dedup_lib)
     FetchContent_Declare(
-        ThreadPool
-        GIT_REPOSITORY https://github.com/WenXingming/ThreadPool.git
+        FileSystemTools
+        GIT_REPOSITORY https://github.com/WenXingming/FileSystemTools.git
         GIT_TAG master
         GIT_SHALLOW TRUE
     )
-    FetchContent_MakeAvailable(ThreadPool)
+    FetchContent_MakeAvailable(FileSystemTools)
 endif()
 
 # 优先使用系统中的 BLAKE3，未找到时获取官方 C 实现。
@@ -79,10 +75,7 @@ if(NOT TARGET Tudou::tudou)
     FetchContent_MakeAvailable(Tudou)
 endif()
 
-add_subdirectory(src/config)
-add_subdirectory(src/dedup)
-add_subdirectory(src/storage)
-add_subdirectory(src/server)
+add_subdirectory(src)
 
 if(FILELINK_BUILD_TESTS)
     enable_testing()
@@ -100,12 +93,9 @@ if(FILELINK_BUILD_TESTS)
         FetchContent_MakeAvailable(googletest)
     endif()
 
-    add_subdirectory(tests/config)
-    add_subdirectory(tests/dedup)
-    add_subdirectory(tests/storage)
-    add_subdirectory(tests/server)
+    add_subdirectory(tests)
 endif()
 
 if(FILELINK_BUILD_BENCHMARKS)
-    add_subdirectory(benchmarks/dedup)
+    # add_subdirectory(benchmarks/dedup)
 endif()

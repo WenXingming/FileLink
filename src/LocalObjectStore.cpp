@@ -1,4 +1,4 @@
-#include "storage/LocalObjectStore.h"
+#include "LocalObjectStore.h"
 
 #include <algorithm>
 #include <cerrno>

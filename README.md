@@ -4,22 +4,17 @@ FileLink 正在按小步、可验证的方式重写为团队大文件分发与�
 
 ## 当前状态
 
-- `src/dedup` 包含稳定的离线重复文件发现引擎及其命令行入口。
 - `src/storage` 提供本地内容寻址对象的原子提交与重复复用。
 - `src/server` 提供基于 Tudou 的在线服务入口，目前已支持健康检查。
+- 离线重复文件去重能力 (dedup) 已作为依赖通过 FetchContent 从 `FileSystemTools` 引入。
 - 旧在线服务保存在 `old/server`，仅供理解历史行为，不参与构建。
 
 ## 当前目录
 
 ```text
 FileLink/
-├── src/
-│   ├── config/         # 应用配置
-│   ├── dedup/          # 去重核心与 CLI
-│   ├── storage/        # 本地内容寻址存储
-│   └── server/         # 在线服务入口
+├── src/                # 所有业务逻辑和入口（配置、存储、服务器应用等）
 ├── tests/              # 自动化测试
-├── benchmarks/dedup/   # dedup 性能基准
 ├── docs/               # 架构设计与评测记录
 └── old/
     └── server/         # 旧在线服务，仅供参考
@@ -33,10 +28,10 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-运行 dedup：
+运行配置好后的服务：
 
 ```bash
-./build/src/dedup/filelink-dedup /path/to/directory
+./build/apps/server/filelink-server
 ```
 
 ## 重写原则

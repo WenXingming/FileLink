@@ -24,7 +24,7 @@ for _ in {1..50}; do
         exit 1
     fi
 
-    if response="$("$curl" --silent --show-error --max-time 1 \
+    if response="$("$curl" --noproxy "*" --silent --show-error --max-time 1 \
         --write-out $'\n%{http_code}' "http://127.0.0.1:${port}/health" 2>/dev/null)"; then
         break
     fi

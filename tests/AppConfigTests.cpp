@@ -1,4 +1,4 @@
-#include "config/AppConfig.h"
+#include "AppConfig.h"
 
 #include <gtest/gtest.h>
 

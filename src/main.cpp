@@ -1,4 +1,4 @@
-#include "config/AppConfig.h"
+#include "AppConfig.h"
 
 #include "tudou/http/HttpRequest.h"
 #include "tudou/http/HttpResponse.h"
