@@ -36,7 +36,9 @@ TEST_F(AppConfigTest, UsesDefaults) {
     EXPECT_EQ(config.listenAddress, "0.0.0.0");
     EXPECT_EQ(config.port, 8080);
     EXPECT_EQ(config.ioThreads, 0);
-    EXPECT_EQ(config.storageRoot, "./data");
+    EXPECT_EQ(config.storageRoot, "./storage");
+    EXPECT_EQ(config.webRoot, "./web");
+    EXPECT_EQ(config.logRoot, "./logs");
 }
 
 TEST_F(AppConfigTest, ReadsCommandLineOptions) {

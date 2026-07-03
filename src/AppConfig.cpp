@@ -21,6 +21,7 @@ AppConfig parse_app_config(const std::vector<std::string>& args) {
         return value.empty() ? "存储根目录不能为空" : std::string();
             });
     app.add_option("--web-root", config.webRoot, "静态资源根目录");
+    app.add_option("--log-root", config.logRoot, "日志文件根目录");
 
     // CLI11 的 vector 接口按栈顺序消费参数，对调用方仍暴露自然的命令行顺序。
     std::vector<std::string> parseArgs(args.rbegin(), args.rend());

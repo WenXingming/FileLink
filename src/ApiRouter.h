@@ -30,8 +30,11 @@ private:
     void handleHealth(const HttpRequest& req, HttpResponse& response);
     void handleUpload(const HttpRequest& req, HttpResponse& response);
     void handleDownload(const HttpRequest& req, HttpResponse& response);
+    void handleStatic(const HttpRequest& req, HttpResponse& response);
 
 private:
+    std::string inferMimeType(const std::string& ext) const;
+
     HttpServer& server_;
     LocalObjectStore store_;
     std::string storageRoot_;

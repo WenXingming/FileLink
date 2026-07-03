@@ -11,3 +11,6 @@ cmake-build*/
 
 # agent skills
 .agents/
+
+# storage
+storage/

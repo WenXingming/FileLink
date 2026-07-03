@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FileShare</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <!-- 切换按钮：固定在右上角 -->
+    <button class="theme-toggle" id="themeToggle" title="切换主题">
+        <!-- 默认显示太阳图标 -->
+        <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+    </button>
+
+    <!-- 登录按钮：固定在右上角（不影响上传 UI） -->
+    <button class="auth-toggle" id="authToggle" title="登录/退出">
+        <svg viewBox="0 0 24 24">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+    </button>
+
+    <div class="container">
+        <div class="logo">📁 FileShare</div>
+        <div class="subtitle">简单、快速、安全的文件分享服务</div>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">☁️</div>
+            <div class="upload-text">拖放文件到此处，或点击下方按钮</div>
+            <button class="browse-button" type="button">选择文件</button>
+            <input type="file" id="fileInput">
+        </div>
+
+        <div class="file-info" id="fileInfo">
+            <div class="file-details">
+                <div class="file-name" id="fileName"></div>
+                <div class="file-size" id="fileSize"></div>
+            </div>
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div class="progress-text" id="progressText">0%</div>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <div class="btn-group">
+            <button class="upload-action-btn" id="uploadButton" type="button">Start Upload</button>
+            <button class="cancel-btn" id="cancelButton" type="button">Cancel</button>
+        </div>
+
+        <div class="result-area" id="resultArea">
+            <div class="success-header">
+                <span class="success-icon">✅</span> Upload Successful
+            </div>
+            <div style="margin-bottom: 8px; color: var(--text-secondary); font-size: 0.9rem;">Share Link:</div>
+            <div class="share-link-container">
+                <a href="#" target="_blank" class="share-link" id="shareLink"></a>
+                <button class="copy-btn-small" id="copyButton" type="button">Copy</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 登录弹窗（丝滑弹出，不占用主卡片空间） -->
+    <div class="auth-overlay" id="authOverlay" aria-hidden="true">
+        <div class="auth-modal" role="dialog" aria-modal="true" aria-label="登录">
+            <div class="auth-modal-header">
+                <div>
+                    <div class="auth-modal-title">登录后才可上传</div>
+                </div>
+            </div>
+
+            <div class="auth-body">
+                <div class="login-area" style="margin: 0;">
+                    <div class="login-form">
+                        <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
+                        <input type="password" id="loginPassword" placeholder="密码" autocomplete="current-password">
+                    </div>
+                    <div class="auth-error-message" id="authErrorMessage"></div>
+                    <div class="login-actions">
+                        <button class="login-btn" id="loginButton" type="button">登录</button>
+                        <button class="logout-btn" id="logoutButton" type="button">退出</button>
+                    </div>
+                    <div class="login-status" id="loginStatus"><span class="status-dot"></span><span>未登录</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+
+</html>

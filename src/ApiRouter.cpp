@@ -38,6 +38,10 @@ void ApiRouter::registerRoutes() {
     server_.add_prefix_route("/objects/", [this](const HttpRequest& req, HttpResponse& res) {
         this->handleDownload(req, res);
     });
+
+    server_.add_prefix_route("/static/", [this](const HttpRequest& req, HttpResponse& res) {
+        this->handleStatic(req, res);
+    });
 }
 
 void ApiRouter::handleIndex(const HttpRequest&, HttpResponse& response) {
@@ -152,21 +156,62 @@ void ApiRouter::handleDownload(const HttpRequest& req, HttpResponse& response) {
         response.set_body(content);
         
         // 简单的 MIME 推断
-        std::string mimeType = "application/octet-stream";
-        if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
-        else if (ext == ".png") mimeType = "image/png";
-        else if (ext == ".gif") mimeType = "image/gif";
-        else if (ext == ".txt") mimeType = "text/plain; charset=utf-8";
-        else if (ext == ".html") mimeType = "text/html; charset=utf-8";
-        else if (ext == ".pdf") mimeType = "application/pdf";
-        else if (ext == ".json") mimeType = "application/json";
-        else if (ext == ".mp4") mimeType = "video/mp4";
-        
-        response.set_header("Content-Type", mimeType);
+        response.set_header("Content-Type", inferMimeType(ext));
         response.set_header("Content-Length", std::to_string(content.size()));
     } catch (const std::exception& ex) {
         response = HttpResponse::plain_text(400, "Bad Request", std::string(ex.what()) + "\n");
     }
+}
+
+std::string ApiRouter::inferMimeType(const std::string& ext) const {
+    if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
+    if (ext == ".png") return "image/png";
+    if (ext == ".gif") return "image/gif";
+    if (ext == ".txt") return "text/plain; charset=utf-8";
+    if (ext == ".html") return "text/html; charset=utf-8";
+    if (ext == ".css") return "text/css; charset=utf-8";
+    if (ext == ".js") return "application/javascript; charset=utf-8";
+    if (ext == ".json") return "application/json";
+    if (ext == ".pdf") return "application/pdf";
+    if (ext == ".mp4") return "video/mp4";
+    if (ext == ".svg") return "image/svg+xml";
+    return "application/octet-stream";
+}
+
+void ApiRouter::handleStatic(const HttpRequest& req, HttpResponse& response) {
+    std::string path = req.get_path();
+    
+    // 安全检查：防路径穿越
+    if (path.find("..") != std::string::npos) {
+        response = HttpResponse::plain_text(403, "Forbidden", "Forbidden\n");
+        return;
+    }
+
+    std::string filePath = webRoot_ + path;
+    
+    struct stat info;
+    if (::stat(filePath.c_str(), &info) != 0 || !S_ISREG(info.st_mode)) {
+        response = HttpResponse::plain_text(404, "Not Found", "Not Found\n");
+        return;
+    }
+
+    std::string ext = "";
+    size_t dotPos = filePath.find_last_of('.');
+    if (dotPos != std::string::npos) {
+        ext = filePath.substr(dotPos);
+        for (char& c : ext) c = std::tolower(c);
+    }
+    
+    std::ifstream ifs(filePath, std::ios::binary);
+    if (!ifs) {
+        response = HttpResponse::plain_text(500, "Internal Server Error", "Failed to open file\n");
+        return;
+    }
+    
+    std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    response.set_status(200, "OK");
+    response.set_body(content);
+    response.set_header("Content-Type", inferMimeType(ext));
 }
 
 } // namespace filelink
