@@ -3,7 +3,6 @@
 #include <stdexcept>
 #include <iomanip>
 #include <sstream>
-#include <spdlog/spdlog.h>
 
 namespace filelink {
 
@@ -32,7 +31,6 @@ void StreamUploader::appendChunk(const char* data, size_t length) {
         throw std::runtime_error("Cannot append chunk to a finalized StreamUploader");
     }
     if (length == 0 || data == nullptr) {
-        spdlog::warn("StreamUploader::appendChunk called with empty data or null pointer. Ignoring this chunk.");
         return;
     }
 
