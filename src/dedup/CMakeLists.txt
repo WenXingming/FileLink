@@ -18,3 +18,13 @@ target_link_libraries(filelink_dedup
         ThreadPool
         ${FILELINK_BLAKE3_TARGET}
 )
+
+if(FILELINK_BUILD_DEDUP_TOOL)
+    add_executable(filelink-dedup main.cpp)
+
+    target_link_libraries(filelink-dedup
+        PRIVATE
+            FileLink::dedup
+            CLI11::CLI11
+    )
+endif()

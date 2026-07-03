@@ -64,12 +64,24 @@ if(NOT TARGET CLI11::CLI11)
     FetchContent_MakeAvailable(CLI11)
 endif()
 
+# 在线服务依赖 Tudou；优先使用系统安装，未找到时获取当前开发分支。
+if(NOT TARGET Tudou::tudou)
+    find_package(Tudou CONFIG QUIET)
+endif()
+
+if(NOT TARGET Tudou::tudou)
+    FetchContent_Declare(
+        Tudou
+        GIT_REPOSITORY https://github.com/WenXingming/Tudou.git
+        GIT_TAG develop
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(Tudou)
+endif()
+
 add_subdirectory(src/config)
 add_subdirectory(src/dedup)
-
-if(FILELINK_BUILD_DEDUP_TOOL)
-    add_subdirectory(tools/dedup)
-endif()
+add_subdirectory(src/server)
 
 if(FILELINK_BUILD_TESTS)
     enable_testing()
@@ -89,6 +101,7 @@ if(FILELINK_BUILD_TESTS)
 
     add_subdirectory(tests/config)
     add_subdirectory(tests/dedup)
+    add_subdirectory(tests/server)
 endif()
 
 if(FILELINK_BUILD_BENCHMARKS)
