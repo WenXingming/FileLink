@@ -1,0 +1,73 @@
+# 使用 Docker Compose 来管理 Tudou 的服务，启动命令：
+# 
+# 启动并以后台模式运行容器：
+# cd /home/wxm/Tudou && sudo docker compose up -d
+# 查看容器运行状态：
+# cd /home/wxm/Tudou && sudo docker compose ps
+# 查看容器日志：
+# cd /home/wxm/Tudou && sudo docker compose logs -f
+# 停止容器：
+# cd /home/wxm/Tudou && sudo docker compose stop
+# 重启容器：
+# cd /home/wxm/Tudou && sudo docker compose restart
+# 停止并删除容器：
+# cd /home/wxm/Tudou && sudo docker compose down
+#
+# 注意：
+#   1. 确保 /home/wxm/mysql-data 和 /home/wxm/redis-data 目录存在且有适当的权限，以便容器能够读写数据。
+#   2. 可以使用 Navicat 或其他数据库管理工具连接到 MySQL/Redis 服务，主机地址为 ${local_ip}，端口分别为 3306（MySQL）和 6379（Redis）。
+
+services:
+  # ===============================================================================================
+  # --- MySQL 服务 ---
+  # ===============================================================================================
+  mysql:
+    image: mysql:8.0.44-debian
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-filelink}
+      MYSQL_USER: ${MYSQL_USER:-filelink}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: Asia/Shanghai
+    ports:
+      - "${MYSQL_PORT:-3306}:3306" # 映射主机的 3306 端口到容器的 3306 端口
+    volumes:
+      - mysql-data:/var/lib/mysql  # 将主机的目录映射到容器内，确保数据持久化，/var/lib/mysql 是 MySQL 默认的数据目录
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ===============================================================================================
+  # --- Redis 服务 ---
+  # ===============================================================================================
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ==============================================================================================
+  # --- Nginx 服务反向代理服务 ---
+  # ==============================================================================================
+  nginx:
+    image: nginx:trixie-perl
+    profiles: ["proxy"] # docker compose --profile proxy up -d nginx
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./config/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  mysql-data:
+  redis-data:
