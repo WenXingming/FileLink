@@ -15,6 +15,7 @@ target_compile_features(filelink_lib PUBLIC cxx_std_14)
 target_link_libraries(filelink_lib PUBLIC 
     CLI11::CLI11
     Tudou::tudou
+    ${FILELINK_BLAKE3_TARGET}
 )
 
 # 在线服务可执行程序

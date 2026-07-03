@@ -17,7 +17,7 @@ if(NOT TARGET dedup_lib)
     FetchContent_Declare(
         FileSystemTools
         GIT_REPOSITORY https://github.com/WenXingming/FileSystemTools.git
-        GIT_TAG master
+        GIT_TAG develop
         GIT_SHALLOW TRUE
     )
     FetchContent_MakeAvailable(FileSystemTools)
