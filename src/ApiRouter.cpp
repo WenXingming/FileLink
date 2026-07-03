@@ -12,13 +12,17 @@
 
 namespace filelink {
 
-ApiRouter::ApiRouter(HttpServer& server, LocalObjectStore store, std::string storageRoot)
+ApiRouter::ApiRouter(HttpServer& server, LocalObjectStore store, std::string storageRoot, std::string webRoot)
     : server_(server),
       store_(std::move(store)),
-      storageRoot_(std::move(storageRoot)) {}
+      storageRoot_(std::move(storageRoot)),
+      webRoot_(std::move(webRoot)) {}
 
 void ApiRouter::registerRoutes() {
-    // 使用 std::bind 绑定成员函数到路由回调
+    server_.add_get_route("/", [this](const HttpRequest& req, HttpResponse& res) {
+        this->handleIndex(req, res);
+    });
+
     server_.add_get_route("/health", [this](const HttpRequest& req, HttpResponse& res) {
         this->handleHealth(req, res);
     });
@@ -30,6 +34,21 @@ void ApiRouter::registerRoutes() {
     server_.add_prefix_route("/objects/", [this](const HttpRequest& req, HttpResponse& res) {
         this->handleDownload(req, res);
     });
+}
+
+void ApiRouter::handleIndex(const HttpRequest&, HttpResponse& response) {
+    std::string indexPath = webRoot_ + "/index.html";
+    std::ifstream ifs(indexPath, std::ios::binary);
+    if (!ifs) {
+        response = HttpResponse::plain_text(404, "Not Found", "<h1>404 Not Found</h1><p>index.html not found</p>");
+        response.set_header("Content-Type", "text/html; charset=utf-8");
+        return;
+    }
+    
+    std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    response.set_status(200, "OK");
+    response.set_body(content);
+    response.set_header("Content-Type", "text/html; charset=utf-8");
 }
 
 void ApiRouter::handleHealth(const HttpRequest&, HttpResponse& response) {
@@ -53,9 +72,15 @@ void ApiRouter::handleUpload(const HttpRequest& req, HttpResponse& response) {
         // 3. 将验证后的内容提交到对象存储
         auto result = store_.commit(tempPath, finalHash);
         
-        // 4. 构建成功响应
-        std::string respBody = "{\"status\":\"success\",\"hash\":\"" + finalHash + "\",\"result\":\"" + 
-                               (result.status == CommitStatus::Created ? "created" : "reused") + "\"}";
+        // 4. 构建前端所需的 url 与成功响应
+        std::string host = req.get_header("Host");
+        if (host.empty()) {
+            host = "127.0.0.1:8080";
+        }
+        std::string shareUrl = "http://" + host + "/objects/" + finalHash;
+        std::string resultStr = (result.status == CommitStatus::Created ? "created" : "reused");
+        
+        std::string respBody = "{\"status\":\"success\",\"hash\":\"" + finalHash + "\",\"result\":\"" + resultStr + "\",\"url\":\"" + shareUrl + "\"}";
         response = HttpResponse::plain_text(200, "OK", respBody);
         response.set_header("Content-Type", "application/json");
         

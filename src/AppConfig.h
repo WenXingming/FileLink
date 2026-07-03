@@ -11,6 +11,7 @@ struct AppConfig {
     uint16_t port = 8080;
     int ioThreads = 0;
     std::string storageRoot = "./data";
+    std::string webRoot = "./config/filelink/html";
 };
 
 AppConfig parse_app_config(const std::vector<std::string>& args);

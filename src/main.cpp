@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
         HttpServer server(config.listenAddress, config.port, config.ioThreads);
         
         // 挂载 API 路由模块
-        filelink::ApiRouter router(server, store, config.storageRoot);
+        filelink::ApiRouter router(server, store, config.storageRoot, config.webRoot);
         router.registerRoutes();
 
         server.start();
