@@ -23,6 +23,10 @@ void ApiRouter::registerRoutes() {
         this->handleIndex(req, res);
     });
 
+    server_.add_get_route("/index.html", [this](const HttpRequest& req, HttpResponse& res) {
+        this->handleIndex(req, res);
+    });
+
     server_.add_get_route("/health", [this](const HttpRequest& req, HttpResponse& res) {
         this->handleHealth(req, res);
     });
@@ -72,12 +76,21 @@ void ApiRouter::handleUpload(const HttpRequest& req, HttpResponse& response) {
         // 3. 将验证后的内容提交到对象存储
         auto result = store_.commit(tempPath, finalHash);
         
-        // 4. 构建前端所需的 url 与成功响应
+        // 4. 获取文件名并提取后缀
+        std::string fileName = req.get_header("X-File-Name");
+        std::string ext = "";
+        size_t dotPos = fileName.find_last_of('.');
+        if (dotPos != std::string::npos) {
+            // URL 编码的 . 依然是 .，所以可以直接截取
+            ext = fileName.substr(dotPos);
+        }
+
+        // 5. 构建前端所需的 url 与成功响应
         std::string host = req.get_header("Host");
         if (host.empty()) {
             host = "127.0.0.1:8080";
         }
-        std::string shareUrl = "http://" + host + "/objects/" + finalHash;
+        std::string shareUrl = "http://" + host + "/objects/" + finalHash + ext;
         std::string resultStr = (result.status == CommitStatus::Created ? "created" : "reused");
         
         std::string respBody = "{\"status\":\"success\",\"hash\":\"" + finalHash + "\",\"result\":\"" + resultStr + "\",\"url\":\"" + shareUrl + "\"}";
@@ -105,7 +118,18 @@ void ApiRouter::handleDownload(const HttpRequest& req, HttpResponse& response) {
         return;
     }
 
-    std::string hash = path.substr(prefix.size());
+    std::string hashWithExt = path.substr(prefix.size());
+    std::string hash = hashWithExt;
+    std::string ext = "";
+    
+    size_t dotPos = hashWithExt.find_last_of('.');
+    if (dotPos != std::string::npos) {
+        hash = hashWithExt.substr(0, dotPos);
+        ext = hashWithExt.substr(dotPos);
+        // 转小写处理
+        for (char& c : ext) c = std::tolower(c);
+    }
+
     try {
         std::string objectPath = store_.getObjectPath(hash);
         
@@ -117,7 +141,6 @@ void ApiRouter::handleDownload(const HttpRequest& req, HttpResponse& response) {
         }
 
         // 妥协版 MVP 读取策略：一次性读入内存
-        // TODO: 升级 Tudou 框架支持 sendfile 或流式写入 HTTP 响应
         std::ifstream ifs(objectPath, std::ios::binary);
         if (!ifs) {
             response = HttpResponse::plain_text(500, "Internal Server Error", "Failed to open object\n");
@@ -127,7 +150,19 @@ void ApiRouter::handleDownload(const HttpRequest& req, HttpResponse& response) {
         std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
         response.set_status(200, "OK");
         response.set_body(content);
-        response.set_header("Content-Type", "application/octet-stream");
+        
+        // 简单的 MIME 推断
+        std::string mimeType = "application/octet-stream";
+        if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
+        else if (ext == ".png") mimeType = "image/png";
+        else if (ext == ".gif") mimeType = "image/gif";
+        else if (ext == ".txt") mimeType = "text/plain; charset=utf-8";
+        else if (ext == ".html") mimeType = "text/html; charset=utf-8";
+        else if (ext == ".pdf") mimeType = "application/pdf";
+        else if (ext == ".json") mimeType = "application/json";
+        else if (ext == ".mp4") mimeType = "video/mp4";
+        
+        response.set_header("Content-Type", mimeType);
         response.set_header("Content-Length", std::to_string(content.size()));
     } catch (const std::exception& ex) {
         response = HttpResponse::plain_text(400, "Bad Request", std::string(ex.what()) + "\n");
