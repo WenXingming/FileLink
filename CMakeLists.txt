@@ -81,6 +81,7 @@ endif()
 
 add_subdirectory(src/config)
 add_subdirectory(src/dedup)
+add_subdirectory(src/storage)
 add_subdirectory(src/server)
 
 if(FILELINK_BUILD_TESTS)
@@ -101,6 +102,7 @@ if(FILELINK_BUILD_TESTS)
 
     add_subdirectory(tests/config)
     add_subdirectory(tests/dedup)
+    add_subdirectory(tests/storage)
     add_subdirectory(tests/server)
 endif()
 
