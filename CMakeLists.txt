@@ -21,7 +21,7 @@ if(NOT TARGET ThreadPool)
     FetchContent_Declare(
         ThreadPool
         GIT_REPOSITORY https://github.com/WenXingming/ThreadPool.git
-        GIT_TAG main
+        GIT_TAG master
         GIT_SHALLOW TRUE
     )
     FetchContent_MakeAvailable(ThreadPool)
@@ -49,12 +49,12 @@ else()
     set(FILELINK_BLAKE3_TARGET blake3)
 endif()
 
-# CLI11 只服务于离线工具，不进入 dedup 核心库。
-if(FILELINK_BUILD_DEDUP_TOOL AND NOT TARGET CLI11::CLI11)
+# 配置模块和离线工具共享 CLI11；优先使用系统安装，未找到时自动获取。
+if(NOT TARGET CLI11::CLI11)
     find_package(CLI11 2.4 CONFIG QUIET)
 endif()
 
-if(FILELINK_BUILD_DEDUP_TOOL AND NOT TARGET CLI11::CLI11)
+if(NOT TARGET CLI11::CLI11)
     FetchContent_Declare(
         CLI11
         GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
@@ -64,6 +64,7 @@ if(FILELINK_BUILD_DEDUP_TOOL AND NOT TARGET CLI11::CLI11)
     FetchContent_MakeAvailable(CLI11)
 endif()
 
+add_subdirectory(src/config)
 add_subdirectory(src/dedup)
 
 if(FILELINK_BUILD_DEDUP_TOOL)
@@ -86,6 +87,7 @@ if(FILELINK_BUILD_TESTS)
         FetchContent_MakeAvailable(googletest)
     endif()
 
+    add_subdirectory(tests/config)
     add_subdirectory(tests/dedup)
 endif()
 
