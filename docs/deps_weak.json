@@ -1,0 +1,107 @@
+{
+  "root": "/home/wxm/FileLink",
+  "cpp_view": "headers",
+  "direction": "TB",
+  "nodes": [
+    "src/ApiResponseView.h",
+    "src/ApiRouter.h",
+    "src/AppConfig.h",
+    "src/MySqlConfig.h",
+    "src/MySqlConnection.h",
+    "src/MySqlPool.h",
+    "src/ObjectService.h",
+    "src/ObjectStore.h",
+    "src/StaticFileService.h",
+    "src/StreamUploader.h",
+    "src/main.cpp"
+  ],
+  "edges": [
+    {
+      "source": "src/ApiResponseView.h",
+      "target": "src/ObjectService.h"
+    },
+    {
+      "source": "src/ApiRouter.h",
+      "target": "src/ApiResponseView.h"
+    },
+    {
+      "source": "src/ApiRouter.h",
+      "target": "src/ObjectService.h"
+    },
+    {
+      "source": "src/ApiRouter.h",
+      "target": "src/StaticFileService.h"
+    },
+    {
+      "source": "src/AppConfig.h",
+      "target": "src/MySqlConfig.h"
+    },
+    {
+      "source": "src/MySqlConnection.h",
+      "target": "src/MySqlConfig.h"
+    },
+    {
+      "source": "src/MySqlPool.h",
+      "target": "src/MySqlConfig.h"
+    },
+    {
+      "source": "src/MySqlPool.h",
+      "target": "src/MySqlConnection.h"
+    },
+    {
+      "source": "src/ObjectService.h",
+      "target": "src/ObjectStore.h"
+    },
+    {
+      "source": "src/ObjectService.h",
+      "target": "src/StreamUploader.h"
+    },
+    {
+      "source": "src/main.cpp",
+      "target": "src/ApiRouter.h"
+    },
+    {
+      "source": "src/main.cpp",
+      "target": "src/AppConfig.h"
+    },
+    {
+      "source": "src/main.cpp",
+      "target": "src/ObjectService.h"
+    },
+    {
+      "source": "src/main.cpp",
+      "target": "src/ObjectStore.h"
+    },
+    {
+      "source": "src/main.cpp",
+      "target": "src/StaticFileService.h"
+    }
+  ],
+  "weak_edges": [
+    "src/main.cpp->src/ObjectService.h",
+    "src/main.cpp->src/ObjectStore.h",
+    "src/main.cpp->src/ApiRouter.h",
+    "src/main.cpp->src/StaticFileService.h"
+  ],
+  "fan_in": {
+    "src/ApiResponseView.h": 1,
+    "src/ApiRouter.h": 1,
+    "src/AppConfig.h": 1,
+    "src/MySqlConfig.h": 3,
+    "src/MySqlConnection.h": 1,
+    "src/ObjectService.h": 3,
+    "src/ObjectStore.h": 2,
+    "src/StaticFileService.h": 2,
+    "src/StreamUploader.h": 1
+  },
+  "fan_out": {
+    "src/ApiResponseView.h": 1,
+    "src/ApiRouter.h": 3,
+    "src/AppConfig.h": 1,
+    "src/MySqlConnection.h": 1,
+    "src/MySqlPool.h": 2,
+    "src/ObjectService.h": 2,
+    "src/main.cpp": 5
+  },
+  "cycles": []
+}
