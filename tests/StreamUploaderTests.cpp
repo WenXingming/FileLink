@@ -1,5 +1,5 @@
 #include "StreamUploader.h"
-#include "LocalObjectStore.h"
+#include "ObjectStore.h"
 
 #include <gtest/gtest.h>
 #include <cstdio>
@@ -67,8 +67,8 @@ TEST_F(StreamUploaderTest, ComputesCorrectHashAndWritesContent) {
     filelink::StreamUploader uploader(tempFile);
     
     // 分批次喂入数据流，模拟网络分块到达
-    uploader.appendChunk("hello ", 6);
-    uploader.appendChunk("world", 5);
+    uploader.append_chunk("hello ", 6);
+    uploader.append_chunk("world", 5);
     
     // 验证返回的哈希是否正确
     std::string actualHash = uploader.finalize();
@@ -83,13 +83,13 @@ TEST_F(StreamUploaderTest, ComputesCorrectHashAndWritesContent) {
 TEST_F(StreamUploaderTest, ThrowsWhenFinalizedTwice) {
     std::string tempFile = testDir_ + "/temp_upload_2.tmp";
     filelink::StreamUploader uploader(tempFile);
-    uploader.appendChunk("data", 4);
+    uploader.append_chunk("data", 4);
     
     uploader.finalize();
     
     // 再次调用应该抛出异常，防止重复操作
     EXPECT_THROW(uploader.finalize(), std::runtime_error);
-    EXPECT_THROW(uploader.appendChunk("more", 4), std::runtime_error);
+    EXPECT_THROW(uploader.append_chunk("more", 4), std::runtime_error);
 }
 
 // 验证不能打开文件时的行为
@@ -100,8 +100,8 @@ TEST_F(StreamUploaderTest, ThrowsWhenFileCannotBeOpened) {
     EXPECT_THROW({ filelink::StreamUploader uploader(invalidFile); }, std::runtime_error);
 }
 
-// （进阶集成测试）验证与 LocalObjectStore 的协同闭环
-TEST_F(StreamUploaderTest, IntegratesWithLocalObjectStore) {
+// （进阶集成测试）验证与 ObjectStore 的协同闭环
+TEST_F(StreamUploaderTest, IntegratesWithObjectStore) {
     std::string tempFile = testDir_ + "/temp_upload_3.tmp";
     std::string storageRoot = testDir_;
     
@@ -111,14 +111,14 @@ TEST_F(StreamUploaderTest, IntegratesWithLocalObjectStore) {
     // 注意：不能简单使用 "Integration Testing Content" 因为它的哈希不是 expectedHash (d74981ef...)
     // 为了让 teardown 中的 remove 起作用，我们用 "hello world"
     content = "hello world";
-    uploader.appendChunk(content.c_str(), content.length());
+    uploader.append_chunk(content.c_str(), content.length());
     std::string finalHash = uploader.finalize();
     
     // 临时文件此刻应当存在
     EXPECT_TRUE(path_exists(tempFile));
     
     // 2. 将临时文件提交给底层对象存储
-    filelink::LocalObjectStore store(storageRoot);
+    filelink::ObjectStore store(storageRoot);
     auto result = store.commit(tempFile, finalHash);
     
     EXPECT_EQ(result.status, filelink::CommitStatus::Created);

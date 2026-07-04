@@ -14,15 +14,15 @@ struct CommitResult {
     std::string objectPath;
 };
 
-class LocalObjectStore {
+class ObjectStore {
 public:
-    explicit LocalObjectStore(std::string storageRoot);
+    explicit ObjectStore(std::string storageRoot);
 
     CommitResult commit(
         const std::string& tempPath,
         const std::string& contentHash) const;
 
-    std::string getObjectPath(const std::string& contentHash) const;
+    std::string get_object_path(const std::string& contentHash) const;
 
 private:
     std::string storageRoot_;

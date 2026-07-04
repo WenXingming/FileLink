@@ -24,7 +24,7 @@ public:
     StreamUploader(const StreamUploader&) = delete;
     StreamUploader& operator=(const StreamUploader&) = delete;
 
-    void appendChunk(const char* data, size_t length);
+    void append_chunk(const char* data, size_t length);
     std::string finalize();
 
 private:

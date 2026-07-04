@@ -1,4 +1,4 @@
-#include "LocalObjectStore.h"
+#include "ObjectStore.h"
 
 #include <gtest/gtest.h>
 
@@ -34,7 +34,7 @@ std::string read_file(const std::string& path) {
         std::istreambuf_iterator<char>());
 }
 
-class LocalObjectStoreTest : public testing::Test {
+class ObjectStoreTest : public testing::Test {
 protected:
     void SetUp() override {
         std::string pattern = "/tmp/filelink_object_store_XXXXXX";
@@ -68,11 +68,11 @@ protected:
 
 } // namespace
 
-TEST_F(LocalObjectStoreTest, CreatesContentAddressedObject) {
+TEST_F(ObjectStoreTest, CreatesContentAddressedObject) {
     const std::string tempPath = baseDir_ + "/first.tmp";
     write_file(tempPath, "first content");
 
-    const filelink::LocalObjectStore store(storageRoot_);
+    const filelink::ObjectStore store(storageRoot_);
     const filelink::CommitResult result = store.commit(tempPath, kHash);
 
     EXPECT_EQ(result.status, filelink::CommitStatus::Created);
@@ -81,13 +81,13 @@ TEST_F(LocalObjectStoreTest, CreatesContentAddressedObject) {
     EXPECT_EQ(read_file(result.objectPath), "first content");
 }
 
-TEST_F(LocalObjectStoreTest, ReusesExistingObjectWithoutOverwritingIt) {
+TEST_F(ObjectStoreTest, ReusesExistingObjectWithoutOverwritingIt) {
     const std::string firstTemp = baseDir_ + "/first.tmp";
     const std::string secondTemp = baseDir_ + "/second.tmp";
     write_file(firstTemp, "original content");
     write_file(secondTemp, "different content");
 
-    const filelink::LocalObjectStore store(storageRoot_);
+    const filelink::ObjectStore store(storageRoot_);
     ASSERT_EQ(store.commit(firstTemp, kHash).status, filelink::CommitStatus::Created);
 
     const filelink::CommitResult result = store.commit(secondTemp, kHash);
@@ -98,23 +98,23 @@ TEST_F(LocalObjectStoreTest, ReusesExistingObjectWithoutOverwritingIt) {
     EXPECT_EQ(read_file(result.objectPath), "original content");
 }
 
-TEST_F(LocalObjectStoreTest, RejectsInvalidHashAndPreservesTempFile) {
+TEST_F(ObjectStoreTest, RejectsInvalidHashAndPreservesTempFile) {
     const std::string tempPath = baseDir_ + "/first.tmp";
     write_file(tempPath, "content");
 
-    const filelink::LocalObjectStore store(storageRoot_);
+    const filelink::ObjectStore store(storageRoot_);
 
     EXPECT_THROW(store.commit(tempPath, std::string(64, 'A')), std::invalid_argument);
     EXPECT_TRUE(path_exists(tempPath));
     EXPECT_FALSE(path_exists(storageRoot_));
 }
 
-TEST_F(LocalObjectStoreTest, PreservesTempFileWhenObjectDirectoryCannotBeCreated) {
+TEST_F(ObjectStoreTest, PreservesTempFileWhenObjectDirectoryCannotBeCreated) {
     const std::string tempPath = baseDir_ + "/first.tmp";
     write_file(storageRoot_, "not a directory");
     write_file(tempPath, "content");
 
-    const filelink::LocalObjectStore store(storageRoot_);
+    const filelink::ObjectStore store(storageRoot_);
 
     EXPECT_THROW(store.commit(tempPath, kHash), std::system_error);
     EXPECT_TRUE(path_exists(tempPath));

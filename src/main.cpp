@@ -1,5 +1,7 @@
 #include "AppConfig.h"
-#include "LocalObjectStore.h"
+#include "ObjectStore.h"
+#include "ObjectService.h"
+#include "StaticFileService.h"
 #include "ApiRouter.h"
 #include "tudou/http/HttpServer.h"
 
@@ -20,13 +22,15 @@ int main(int argc, char* argv[]) {
             ::mkdir(config.storageRoot.c_str(), 0755);
         }
 
-        // 初始化对象存储与网络服务
-        filelink::LocalObjectStore store(config.storageRoot);
+        // 初始化对象存储与业务服务
+        filelink::ObjectStore store(config.storageRoot);
+        filelink::ObjectService objectService(std::move(store), config.storageRoot);
+        filelink::StaticFileService staticFileService(config.webRoot);
         HttpServer server(config.listenAddress, config.port, config.ioThreads);
         
         // 挂载 API 路由模块
-        filelink::ApiRouter router(server, store, config.storageRoot, config.webRoot);
-        router.registerRoutes();
+        filelink::ApiRouter router(server, objectService, staticFileService);
+        router.register_routes();
 
         server.start();
         return 0;

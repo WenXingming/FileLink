@@ -1,5 +1,5 @@
 #include "ApiRouter.h"
-#include "StreamUploader.h"
+#include "ApiResponseView.h"
 
 #include "tudou/http/HttpRequest.h"
 #include "tudou/http/HttpResponse.h"
@@ -12,105 +12,85 @@
 
 namespace filelink {
 
-ApiRouter::ApiRouter(HttpServer& server, LocalObjectStore store, std::string storageRoot, std::string webRoot)
+ApiRouter::ApiRouter(HttpServer& server, ObjectService& objectService, StaticFileService& staticFileService)
     : server_(server),
-      store_(std::move(store)),
-      storageRoot_(std::move(storageRoot)),
-      webRoot_(std::move(webRoot)) {}
+    objectService_(objectService),
+    staticFileService_(staticFileService) {
+}
 
-void ApiRouter::registerRoutes() {
+void ApiRouter::register_routes() {
     server_.add_get_route("/", [this](const HttpRequest& req, HttpResponse& res) {
-        this->handleIndex(req, res);
-    });
+        this->handle_index(req, res);
+        });
 
     server_.add_get_route("/index.html", [this](const HttpRequest& req, HttpResponse& res) {
-        this->handleIndex(req, res);
-    });
+        this->handle_index(req, res);
+        });
 
     server_.add_get_route("/health", [this](const HttpRequest& req, HttpResponse& res) {
-        this->handleHealth(req, res);
-    });
+        this->handle_health(req, res);
+        });
 
     server_.add_post_route("/upload", [this](const HttpRequest& req, HttpResponse& res) {
-        this->handleUpload(req, res);
-    });
+        this->handle_upload(req, res);
+        });
 
     server_.add_prefix_route("/objects/", [this](const HttpRequest& req, HttpResponse& res) {
-        this->handleDownload(req, res);
-    });
+        this->handle_download(req, res);
+        });
 
     server_.add_prefix_route("/static/", [this](const HttpRequest& req, HttpResponse& res) {
-        this->handleStatic(req, res);
-    });
+        this->handle_static(req, res);
+        });
 }
 
-void ApiRouter::handleIndex(const HttpRequest&, HttpResponse& response) {
-    std::string indexPath = webRoot_ + "/index.html";
-    std::ifstream ifs(indexPath, std::ios::binary);
-    if (!ifs) {
-        response = HttpResponse::plain_text(404, "Not Found", "<h1>404 Not Found</h1><p>index.html not found</p>");
-        response.set_header("Content-Type", "text/html; charset=utf-8");
-        return;
-    }
-    
-    std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-    response.set_status(200, "OK");
-    response.set_body(content);
-    response.set_header("Content-Type", "text/html; charset=utf-8");
-}
-
-void ApiRouter::handleHealth(const HttpRequest&, HttpResponse& response) {
-    response = HttpResponse::plain_text(200, "OK", R"({"status":"ok"})");
-    response.set_header("Content-Type", "application/json");
-}
-
-void ApiRouter::handleUpload(const HttpRequest& req, HttpResponse& response) {
+void ApiRouter::handle_index(const HttpRequest&, HttpResponse& response) {
     try {
-        // 1. 生成唯一的临时文件路径
-        uint64_t reqId = ++reqCounter_;
-        auto now = std::chrono::system_clock::now().time_since_epoch().count();
-        std::string tempPath = storageRoot_ + "/tmp_upload_" + std::to_string(now) + "_" + std::to_string(reqId) + ".tmp";
-        
-        // 2. 利用 StreamUploader 边写临时文件边算哈希
-        StreamUploader uploader(tempPath);
-        const std::string& body = req.get_body();
-        uploader.appendChunk(body.data(), body.size());
-        std::string finalHash = uploader.finalize();
-        
-        // 3. 将验证后的内容提交到对象存储
-        auto result = store_.commit(tempPath, finalHash);
-        
-        // 4. 获取文件名并提取后缀
-        std::string fileName = req.get_header("X-File-Name");
-        std::string ext = "";
-        size_t dotPos = fileName.find_last_of('.');
-        if (dotPos != std::string::npos) {
-            // URL 编码的 . 依然是 .，所以可以直接截取
-            ext = fileName.substr(dotPos);
-        }
+        // 1. Controller: 设定默认主页 URI
+        std::string path = "/index.html";
 
-        // 5. 构建前端所需的 url 与成功响应
+        // 2. Model: 调 Model 拿数据
+        std::string content = staticFileService_.get_asset_content(path);
+
+        // 3. View: 调 View 渲染
+        response = ApiResponseView::file(content, ".html");
+    }
+    catch (const std::exception& ex) {
+        // View: 渲染错误响应
+        response = ApiResponseView::error(404, "index.html not found");
+    }
+}
+
+void ApiRouter::handle_health(const HttpRequest&, HttpResponse& response) {
+    response = ApiResponseView::health_check();
+}
+
+void ApiRouter::handle_upload(const HttpRequest& req, HttpResponse& response) {
+    try {
+        // 1. Controller: 提取参数
+        std::string fileName = req.get_header("X-File-Name");
         std::string host = req.get_header("Host");
         if (host.empty()) {
             host = "127.0.0.1:8080";
         }
-        std::string shareUrl = "http://" + host + "/objects/" + finalHash + ext;
-        std::string resultStr = (result.status == CommitStatus::Created ? "created" : "reused");
-        
-        std::string respBody = "{\"status\":\"success\",\"hash\":\"" + finalHash + "\",\"result\":\"" + resultStr + "\",\"url\":\"" + shareUrl + "\"}";
-        response = HttpResponse::plain_text(200, "OK", respBody);
-        response.set_header("Content-Type", "application/json");
-        
-    } catch (const std::exception& ex) {
-        std::string errorBody = std::string("{\"status\":\"error\",\"message\":\"") + ex.what() + "\"}";
-        response = HttpResponse::plain_text(500, "Internal Server Error", errorBody);
-        response.set_header("Content-Type", "application/json");
+
+        // 2. Model: 呼叫业务服务执行逻辑
+        const std::string& body = req.get_body();
+        UploadResult result = objectService_.process_upload(body, fileName);
+
+        // 3. View: 将业务结果交给视图层去渲染 HTTP 响应
+        response = ApiResponseView::upload_success(result, host);
+
+    }
+    catch (const std::exception& ex) {
+        // View: 渲染错误响应
+        response = ApiResponseView::error(500, ex.what());
     }
 }
 
-void ApiRouter::handleDownload(const HttpRequest& req, HttpResponse& response) {
+void ApiRouter::handle_download(const HttpRequest& req, HttpResponse& response) {
     if (req.get_method() != "GET") {
-        response = HttpResponse::plain_text(405, "Method Not Allowed", "Method Not Allowed\n");
+        response = ApiResponseView::error(405, "Method Not Allowed");
         return;
     }
 
@@ -118,14 +98,14 @@ void ApiRouter::handleDownload(const HttpRequest& req, HttpResponse& response) {
     const std::string prefix = "/objects/";
     const std::string path = req.get_path();
     if (path.size() <= prefix.size()) {
-        response = HttpResponse::plain_text(400, "Bad Request", "Missing Hash\n");
+        response = ApiResponseView::error(400, "Missing Hash");
         return;
     }
 
     std::string hashWithExt = path.substr(prefix.size());
     std::string hash = hashWithExt;
     std::string ext = "";
-    
+
     size_t dotPos = hashWithExt.find_last_of('.');
     if (dotPos != std::string::npos) {
         hash = hashWithExt.substr(0, dotPos);
@@ -135,83 +115,45 @@ void ApiRouter::handleDownload(const HttpRequest& req, HttpResponse& response) {
     }
 
     try {
-        std::string objectPath = store_.getObjectPath(hash);
-        
-        // 检查文件是否存在
-        struct stat info;
-        if (::stat(objectPath.c_str(), &info) != 0) {
-            response = HttpResponse::plain_text(404, "Not Found", "Object Not Found\n");
-            return;
-        }
+        // 1. Controller: 提取参数已完成 (hash, ext)
 
-        // 妥协版 MVP 读取策略：一次性读入内存
-        std::ifstream ifs(objectPath, std::ios::binary);
-        if (!ifs) {
-            response = HttpResponse::plain_text(500, "Internal Server Error", "Failed to open object\n");
-            return;
-        }
-        
-        std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-        response.set_status(200, "OK");
-        response.set_body(content);
-        
-        // 简单的 MIME 推断
-        response.set_header("Content-Type", inferMimeType(ext));
-        response.set_header("Content-Length", std::to_string(content.size()));
-    } catch (const std::exception& ex) {
-        response = HttpResponse::plain_text(400, "Bad Request", std::string(ex.what()) + "\n");
+        // 2. Model: 调 ObjectService 拿业务对象数据
+        std::string content = objectService_.get_object_content(hash);
+
+        // 3. View: 调 View 渲染二进制文件响应
+        response = ApiResponseView::file(content, ext);
+    }
+    catch (const std::invalid_argument& ex) {
+        response = ApiResponseView::error(404, ex.what());
+    }
+    catch (const std::exception& ex) {
+        response = ApiResponseView::error(500, ex.what());
     }
 }
 
-std::string ApiRouter::inferMimeType(const std::string& ext) const {
-    if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
-    if (ext == ".png") return "image/png";
-    if (ext == ".gif") return "image/gif";
-    if (ext == ".txt") return "text/plain; charset=utf-8";
-    if (ext == ".html") return "text/html; charset=utf-8";
-    if (ext == ".css") return "text/css; charset=utf-8";
-    if (ext == ".js") return "application/javascript; charset=utf-8";
-    if (ext == ".json") return "application/json";
-    if (ext == ".pdf") return "application/pdf";
-    if (ext == ".mp4") return "video/mp4";
-    if (ext == ".svg") return "image/svg+xml";
-    return "application/octet-stream";
-}
+void ApiRouter::handle_static(const HttpRequest& req, HttpResponse& response) {
+    try {
+        // 1. Controller: 提取 URI
+        std::string path = req.get_path();
 
-void ApiRouter::handleStatic(const HttpRequest& req, HttpResponse& response) {
-    std::string path = req.get_path();
-    
-    // 安全检查：防路径穿越
-    if (path.find("..") != std::string::npos) {
-        response = HttpResponse::plain_text(403, "Forbidden", "Forbidden\n");
-        return;
-    }
+        // 2. Model: 调 Model (StaticFileService) 拿数据
+        std::string content = staticFileService_.get_asset_content(path);
 
-    std::string filePath = webRoot_ + path;
-    
-    struct stat info;
-    if (::stat(filePath.c_str(), &info) != 0 || !S_ISREG(info.st_mode)) {
-        response = HttpResponse::plain_text(404, "Not Found", "Not Found\n");
-        return;
+        // 3. View: 调 View 渲染
+        std::string ext = "";
+        size_t dotPos = path.find_last_of('.');
+        if (dotPos != std::string::npos) {
+            ext = path.substr(dotPos);
+            for (char& c : ext) c = std::tolower(c);
+        }
+        response = ApiResponseView::file(content, ext);
     }
-
-    std::string ext = "";
-    size_t dotPos = filePath.find_last_of('.');
-    if (dotPos != std::string::npos) {
-        ext = filePath.substr(dotPos);
-        for (char& c : ext) c = std::tolower(c);
+    catch (const std::invalid_argument& ex) {
+        response = ApiResponseView::error(403, ex.what());
     }
-    
-    std::ifstream ifs(filePath, std::ios::binary);
-    if (!ifs) {
-        response = HttpResponse::plain_text(500, "Internal Server Error", "Failed to open file\n");
-        return;
+    catch (const std::exception& ex) {
+        response = ApiResponseView::error(404, ex.what());
     }
-    
-    std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-    response.set_status(200, "OK");
-    response.set_body(content);
-    response.set_header("Content-Type", inferMimeType(ext));
 }
 
 } // namespace filelink

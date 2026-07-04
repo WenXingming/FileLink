@@ -1,4 +1,4 @@
-#include "LocalObjectStore.h"
+#include "ObjectStore.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -53,14 +53,14 @@ void ensure_directory(const std::string& path) {
 
 namespace filelink {
 
-LocalObjectStore::LocalObjectStore(std::string storageRoot)
+ObjectStore::ObjectStore(std::string storageRoot)
     : storageRoot_(std::move(storageRoot)) {
     if (storageRoot_.empty()) {
         throw std::invalid_argument("存储根目录不能为空");
     }
 }
 
-CommitResult LocalObjectStore::commit(
+CommitResult ObjectStore::commit(
     const std::string& tempPath,
     const std::string& contentHash) const {
     if (!is_valid_hash(contentHash)) {
@@ -92,7 +92,7 @@ CommitResult LocalObjectStore::commit(
     throw std::system_error(linkError, std::generic_category(), tempPath);
 }
 
-std::string LocalObjectStore::getObjectPath(const std::string& contentHash) const {
+std::string ObjectStore::get_object_path(const std::string& contentHash) const {
     if (!is_valid_hash(contentHash)) {
         throw std::invalid_argument("内容摘要必须是 64 位小写十六进制字符串");
     }

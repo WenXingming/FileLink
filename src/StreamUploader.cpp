@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <iomanip>
 #include <sstream>
+#include <unistd.h>
 
 namespace filelink {
 
@@ -24,9 +25,13 @@ StreamUploader::~StreamUploader() {
     if (outStream_.is_open()) {
         outStream_.close();
     }
+    // 异常路径：如果析构时未 finalize，说明上传失败，自动清理残余的临时文件
+    if (!isFinalized_) {
+        ::unlink(tempFilePath_.c_str());
+    }
 }
 
-void StreamUploader::appendChunk(const char* data, size_t length) {
+void StreamUploader::append_chunk(const char* data, size_t length) {
     if (isFinalized_) {
         throw std::runtime_error("Cannot append chunk to a finalized StreamUploader");
     }
