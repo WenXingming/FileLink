@@ -12,6 +12,7 @@ struct MySqlConfig {
     std::string password;
     std::string database = "filelink";
     unsigned int connectTimeoutSeconds = 5;
+    unsigned int poolSize = 5;
 };
 
 } // namespace filelink

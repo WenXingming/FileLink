@@ -30,6 +30,7 @@ AppConfig parse_app_config(const std::vector<std::string>& args) {
     app.add_option("--mysql-user", config.mysql.user, "MySQL 用户名");
     app.add_option("--mysql-database", config.mysql.database, "MySQL 数据库名");
     app.add_option("--mysql-connect-timeout-seconds", config.mysql.connectTimeoutSeconds, "MySQL 连接超时时间(秒)");
+    app.add_option("--mysql-pool-size", config.mysql.poolSize, "MySQL 连接池大小");
     
     // 密码只能通过环境变量或命令行传递，禁止写入 TOML 文件
     app.add_option("--mysql-password", config.mysql.password, "MySQL 密码")
