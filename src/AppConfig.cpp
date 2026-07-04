@@ -10,7 +10,7 @@ AppConfig parse_app_config(const std::vector<std::string>& args) {
     AppConfig config;
     CLI::App app{ "FileLink 团队文件分发与存储平台" };
 
-    app.set_config("--config", "", "TOML 配置文件路径", false);
+    app.set_config("--config", "config/server.toml", "TOML 配置文件路径", false);
     app.add_option("--address", config.listenAddress, "监听地址");
     app.add_option("--port", config.port, "监听端口")
         ->check(CLI::Range(1, 65535));
@@ -22,6 +22,18 @@ AppConfig parse_app_config(const std::vector<std::string>& args) {
             });
     app.add_option("--web-root", config.webRoot, "静态资源根目录");
     app.add_option("--log-root", config.logRoot, "日志文件根目录");
+
+    // MySQL 配置
+    app.add_option("--mysql-host", config.mysql.host, "MySQL 主机地址");
+    app.add_option("--mysql-port", config.mysql.port, "MySQL 端口")
+        ->check(CLI::Range(1, 65535));
+    app.add_option("--mysql-user", config.mysql.user, "MySQL 用户名");
+    app.add_option("--mysql-database", config.mysql.database, "MySQL 数据库名");
+    app.add_option("--mysql-connect-timeout-seconds", config.mysql.connectTimeoutSeconds, "MySQL 连接超时时间(秒)");
+    
+    // 密码只能通过环境变量或命令行传递，禁止写入 TOML 文件
+    app.add_option("--mysql-password", config.mysql.password, "MySQL 密码")
+        ->envname("FILELINK_MYSQL_PASSWORD");
 
     // CLI11 的 vector 接口按栈顺序消费参数，对调用方仍暴露自然的命令行顺序。
     std::vector<std::string> parseArgs(args.rbegin(), args.rend());

@@ -12,6 +12,10 @@ option(FILELINK_BUILD_DEDUP_TOOL "构建离线去重命令行工具" ON)
 option(FILELINK_BUILD_TESTS "构建当前稳定模块的测试" OFF)
 option(FILELINK_BUILD_BENCHMARKS "构建当前稳定模块的性能基准" OFF)
 
+# MySQL 官方客户端没有适合 FetchContent 的轻量源码包，使用开发包提供的 pkg-config 信息。
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(MySQLClient REQUIRED IMPORTED_TARGET mysqlclient)
+
 # 离线文件去重引擎由独立的 FileSystemTools 提供。
 if(NOT TARGET dedup_lib)
     FetchContent_Declare(

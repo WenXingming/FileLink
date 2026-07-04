@@ -1,0 +1,13 @@
+address = "0.0.0.0"
+port = 18081
+io-threads = 1
+
+storage-root = "storage"
+web-root = "web"
+log-root = "logs"
+
+mysql-host = "127.0.0.1"
+mysql-port = 3306
+mysql-user = "filelink"
+mysql-database = "filelink"
+mysql-connect-timeout-seconds = 5

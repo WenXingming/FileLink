@@ -12,10 +12,13 @@ file(GLOB_RECURSE FILELINK_HEADERS CONFIGURE_DEPENDS
 add_library(filelink_lib ${FILELINK_SOURCES} ${FILELINK_HEADERS})
 target_include_directories(filelink_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(filelink_lib PUBLIC cxx_std_14)
-target_link_libraries(filelink_lib PUBLIC 
+target_link_libraries(filelink_lib PUBLIC
     CLI11::CLI11
     Tudou::tudou
     ${FILELINK_BLAKE3_TARGET}
+)
+target_link_libraries(filelink_lib PRIVATE
+    PkgConfig::MySQLClient
 )
 
 # 在线服务可执行程序

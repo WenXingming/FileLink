@@ -3,7 +3,7 @@ build*/
 cmake-build*/
 
 # FileLink 运行配置
-/config/
+config/local.toml
 
 # 本地环境变量与日志
 .env

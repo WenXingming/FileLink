@@ -1,50 +1,52 @@
-# 使用 Docker Compose 来管理 Tudou 的服务，启动命令：
+# 使用 Docker Compose 来管理 FileLink 的服务，启动命令：
 # 
 # 启动并以后台模式运行容器：
-# cd /home/wxm/Tudou && sudo docker compose up -d
+# cd /home/wxm/FileLink && sudo docker compose up -d
 # 查看容器运行状态：
-# cd /home/wxm/Tudou && sudo docker compose ps
+# cd /home/wxm/FileLink && sudo docker compose ps
 # 查看容器日志：
-# cd /home/wxm/Tudou && sudo docker compose logs -f
+# cd /home/wxm/FileLink && sudo docker compose logs -f
 # 停止容器：
-# cd /home/wxm/Tudou && sudo docker compose stop
+# cd /home/wxm/FileLink && sudo docker compose stop
 # 重启容器：
-# cd /home/wxm/Tudou && sudo docker compose restart
+# cd /home/wxm/FileLink && sudo docker compose restart
 # 停止并删除容器：
-# cd /home/wxm/Tudou && sudo docker compose down
+# cd /home/wxm/FileLink && sudo docker compose down
 #
 # 注意：
-#   1. 确保 /home/wxm/mysql-data 和 /home/wxm/redis-data 目录存在且有适当的权限，以便容器能够读写数据。
-#   2. 可以使用 Navicat 或其他数据库管理工具连接到 MySQL/Redis 服务，主机地址为 ${local_ip}，端口分别为 3306（MySQL）和 6379（Redis）。
+#   1. Named volumes (mysql-data, redis-data) 将由 Docker 自动管理和持久化，无需手动创建宿主机目录。
+#   2. 可以使用 Navicat 或其他数据库管理工具连接到 MySQL/Redis 服务，主机地址为 127.0.0.1，端口分别为 3306（MySQL）和 6379（Redis）。
 
 services:
   # ===============================================================================================
   # --- MySQL 服务 ---
   # ===============================================================================================
   mysql:
-    image: mysql:8.0.44-debian
+    image: mysql:8.4.10
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-filelink}
-      MYSQL_USER: ${MYSQL_USER:-filelink}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD 未设置}
+      MYSQL_DATABASE: filelink
+      MYSQL_USER: filelink
+      MYSQL_PASSWORD: ${FILELINK_MYSQL_PASSWORD:?FILELINK_MYSQL_PASSWORD 未设置}
       TZ: Asia/Shanghai
     ports:
-      - "${MYSQL_PORT:-3306}:3306" # 映射主机的 3306 端口到容器的 3306 端口
+      - "127.0.0.1:${MYSQL_HOST_PORT:-3306}:3306" # 映射 127.0.0.1 上的 3306 端口到容器的 3306 端口
     volumes:
       - mysql-data:/var/lib/mysql  # 将主机的目录映射到容器内，确保数据持久化，/var/lib/mysql 是 MySQL 默认的数据目录
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 30s
 
   # ===============================================================================================
   # --- Redis 服务 ---
   # ===============================================================================================
   redis:
     image: redis:7.4-alpine
+    profiles: ["cache"] # docker compose --profile cache up -d redis
     restart: unless-stopped
     ports:
       - "${REDIS_PORT:-6379}:6379"
