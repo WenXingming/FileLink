@@ -119,3 +119,14 @@ TEST_F(ObjectStoreTest, PreservesTempFileWhenObjectDirectoryCannotBeCreated) {
     EXPECT_THROW(store.commit(tempPath, kHash), std::system_error);
     EXPECT_TRUE(path_exists(tempPath));
 }
+
+TEST_F(ObjectStoreTest, RejectsNonRegularTempPathWithoutPublishingObject) {
+    const std::string tempPath = baseDir_ + "/first.tmp";
+    ASSERT_EQ(::mkdir(tempPath.c_str(), 0755), 0);
+
+    const filelink::ObjectStore store(storageRoot_);
+
+    EXPECT_THROW(store.commit(tempPath, kHash), std::system_error);
+    EXPECT_TRUE(path_exists(tempPath));
+    EXPECT_FALSE(path_exists(object_path()));
+}
