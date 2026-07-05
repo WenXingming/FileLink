@@ -12,6 +12,9 @@ option(FILELINK_BUILD_DEDUP_TOOL "构建离线去重命令行工具" ON)
 option(FILELINK_BUILD_TESTS "构建当前稳定模块的测试" OFF)
 option(FILELINK_BUILD_BENCHMARKS "构建当前稳定模块的性能基准" OFF)
 
+# FileLink 测试由 FILELINK_BUILD_TESTS 控制，不把第三方项目的测试混入 CTest。
+set(BUILD_TESTING OFF CACHE BOOL "构建第三方依赖的测试" FORCE)
+
 # MySQL 官方客户端没有适合 FetchContent 的轻量源码包，使用开发包提供的 pkg-config 信息。
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MySQLClient REQUIRED IMPORTED_TARGET mysqlclient)
@@ -126,5 +129,4 @@ endif()
 if(FILELINK_BUILD_BENCHMARKS)
     # add_subdirectory(benchmarks/dedup)
 endif()
-
 

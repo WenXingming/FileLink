@@ -20,5 +20,6 @@ struct AppConfig {
 };
 
 AppConfig parse_app_config(const std::vector<std::string>& args);
+void validate_app_config(const AppConfig& config);
 
 } // namespace filelink

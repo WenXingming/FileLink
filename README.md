@@ -37,7 +37,7 @@
 
 ### 1. 外围依赖部署 (MySQL)
 
-为了保证开发环境的干净和版本一致性，推荐使用内置的 Docker Compose 启动 MySQL 8.4 LTS 服务：
+为了保证开发环境的一致性，使用 Docker Compose 启动 MySQL：
 
 ```bash
 # 复制环境变量模板并填入你的专属密码
@@ -45,6 +45,9 @@ cp .env.example .env
 
 # 启动数据库 (无需手工创建数据卷映射目录)
 docker compose up -d mysql
+
+# 执行数据库迁移
+docker compose run --rm migrate
 ```
 
 ### 2. 编译项目
@@ -61,19 +64,24 @@ cmake --build build -j4
 
 ### 3. 运行测试与启动服务
 
-所有的核心模块均具备极高标准的测试覆盖。你可以使用 CTest 确保当前代码在你的机器上是完全健康的：
+构建完成后可以运行 CTest。当前测试集合仍包含需要 MySQL 的集成测试，后续会将单元测试与集成测试入口分开：
 
 ```bash
 # 运行单元测试与集成检查
 ctest --test-dir build --output-on-failure
 ```
 
-如果所有测试绿灯，即可启动服务。FileLink 采用了现代化的配置聚合机制（命令行参数 > 环境变量 > TOML 文件 > 默认值）：
+开发环境统一使用下面的脚本启动。它会加载项目根目录的 `.env`，使用 `config/server.toml`，并把额外参数传给服务：
 
 ```bash
-./build/src/filelink-server --config config/server.toml --port 8080 --mysql-pool-size 10
+./scripts/run-dev
+
+# 临时覆盖端口或连接池大小
+./scripts/run-dev --port 8080 --mysql-pool-size 10
 ```
-*(💡 **安全最佳实践**：数据库密码不会被写入代码或 TOML，而是由宿主机的环境变量 `FILELINK_MYSQL_PASSWORD` 在启动时动态注入，这是为了防止密钥随代码泄露至仓库。)*
+
+数据库密码只保存在已被 Git 忽略的 `.env` 中，由启动脚本导出为
+`FILELINK_MYSQL_PASSWORD`，不会写入 TOML 或源码。
 
 <a id="架构总览"></a>
 

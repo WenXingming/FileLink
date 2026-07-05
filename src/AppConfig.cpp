@@ -3,6 +3,7 @@
 #include "CLI/CLI.hpp"
 
 #include <algorithm>
+#include <stdexcept>
 
 namespace filelink {
 
@@ -40,6 +41,13 @@ AppConfig parse_app_config(const std::vector<std::string>& args) {
     std::vector<std::string> parseArgs(args.rbegin(), args.rend());
     app.parse(parseArgs);
     return config;
+}
+
+void validate_app_config(const AppConfig& config) {
+    if (config.mysql.password.empty()) {
+        throw std::invalid_argument(
+            "缺少必需配置 FILELINK_MYSQL_PASSWORD，请通过环境变量设置 MySQL 密码");
+    }
 }
 
 } // namespace filelink

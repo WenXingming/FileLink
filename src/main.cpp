@@ -19,6 +19,7 @@ int main(int argc, char* argv[]) {
     try {
         const std::vector<std::string> args(argv + 1, argv + argc);
         const filelink::AppConfig config = filelink::parse_app_config(args);
+        filelink::validate_app_config(config);
 
         // 确保临时目录所在的根目录存在
         struct stat info;

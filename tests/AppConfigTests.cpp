@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <fstream>
+#include <stdexcept>
 #include <string>
 #include <unistd.h>
 
@@ -99,4 +100,17 @@ TEST_F(AppConfigTest, RejectsInvalidInput) {
     EXPECT_ANY_THROW(filelink::parse_app_config({
         "--config", "/tmp/filelink_missing_config.toml"
     }));
+}
+
+TEST(AppConfigValidationTest, RejectsMissingMysqlPassword) {
+    filelink::AppConfig config;
+
+    try {
+        filelink::validate_app_config(config);
+        FAIL() << "缺少 MySQL 密码时应拒绝启动";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_STREQ(
+            error.what(),
+            "缺少必需配置 FILELINK_MYSQL_PASSWORD，请通过环境变量设置 MySQL 密码");
+    }
 }
