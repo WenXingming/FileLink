@@ -32,7 +32,6 @@ private:
     // 各个具体路由的处理函数
     void handle_index(const HttpRequest& req, HttpResponse& response);
     void handle_health(const HttpRequest& req, HttpResponse& response);
-    void handle_upload(const HttpRequest& req, HttpResponse& response);
     void handle_download(const HttpRequest& req, HttpResponse& response);
     void handle_static(const HttpRequest& req, HttpResponse& response);
     

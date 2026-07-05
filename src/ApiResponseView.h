@@ -1,7 +1,6 @@
 #pragma once
 
 #include "tudou/http/HttpResponse.h"
-#include "ObjectService.h"
 #include <string>
 
 namespace filelink {
@@ -17,7 +16,6 @@ public:
 
     // 针对具体业务的 View 渲染器
     static HttpResponse health_check();
-    static HttpResponse upload_success(const UploadResult& result, const std::string& host);
     static HttpResponse error(int statusCode, const std::string& message);
     
     // 专门构建二进制/文本文件的 HTTP 响应

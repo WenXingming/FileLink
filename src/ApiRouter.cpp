@@ -36,10 +36,6 @@ void ApiRouter::register_routes() {
         this->handle_health(req, res);
         });
 
-    server_.add_post_route("/upload", [this](const HttpRequest& req, HttpResponse& res) {
-        this->handle_upload(req, res);
-        });
-
     server_.add_route("OPTIONS", "/uploads", [this](const HttpRequest& req, HttpResponse& res) {
         this->handle_tus_options(req, res);
         });
@@ -89,29 +85,6 @@ void ApiRouter::handle_index(const HttpRequest&, HttpResponse& response) {
 
 void ApiRouter::handle_health(const HttpRequest&, HttpResponse& response) {
     response = ApiResponseView::health_check();
-}
-
-void ApiRouter::handle_upload(const HttpRequest& req, HttpResponse& response) {
-    try {
-        // 1. Controller: 提取参数
-        std::string fileName = req.get_header("X-File-Name");
-        std::string host = req.get_header("Host");
-        if (host.empty()) {
-            host = "127.0.0.1:8080";
-        }
-
-        // 2. Model: 呼叫业务服务执行逻辑
-        const std::string& body = req.get_body();
-        UploadResult result = objectService_.process_upload(body, fileName);
-
-        // 3. View: 将业务结果交给视图层去渲染 HTTP 响应
-        response = ApiResponseView::upload_success(result, host);
-
-    }
-    catch (const std::exception& ex) {
-        // View: 渲染错误响应
-        response = ApiResponseView::error(500, ex.what());
-    }
 }
 
 void ApiRouter::handle_download(const HttpRequest& req, HttpResponse& response) {
@@ -305,14 +278,14 @@ void ApiRouter::handle_tus_patch(const HttpRequest& req, HttpResponse& response)
 
     try {
         uint64_t newOffset = 0;
-        int rc = uploadService_.write_session_chunk(uploadIdRaw, clientOffset, req.get_body(), newOffset);
-        if (rc == 200) {
+        UploadChunkResult rc = uploadService_.write_session_chunk(uploadIdRaw, clientOffset, req.get_body(), newOffset);
+        if (rc == UploadChunkResult::Success) {
             response = ApiResponseView::tus_patched(newOffset);
-        } else if (rc == 409) {
+        } else if (rc == UploadChunkResult::OffsetMismatch) {
             response = ApiResponseView::tus_error(409, "Conflict", "Offset Mismatch");
-        } else if (rc == 400) {
+        } else if (rc == UploadChunkResult::InvalidChunkSize) {
             response = ApiResponseView::tus_error(400, "Bad Request", "Invalid Chunk Size or Range");
-        } else if (rc == 404) {
+        } else if (rc == UploadChunkResult::SessionNotFound) {
             response = ApiResponseView::tus_error(404, "Not Found", "Upload Session Not Found");
         } else {
             response = ApiResponseView::tus_error(500, "Internal Server Error", "Chunk Write Failed");

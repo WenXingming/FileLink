@@ -40,19 +40,43 @@ for _ in {1..50}; do
     sleep 0.05
 done
 
-# 上传测试数据 "hello world"
-# "hello world" hash is "d74981efa70a0c880b8d8c1985d075dbcbf679b99a5f9914e5aaf96b831a9e24"
-response="$("$curl" --noproxy "*" -X POST -d "hello world" --silent --show-error "http://127.0.0.1:${port}/upload")"
+# 1. 初始化 TUS 会话
+resp_headers=$(mktemp)
+"$curl" --noproxy "*" -i -X POST -H "Upload-Length: 11" -H "Upload-Metadata: filename aGVsbG8udHh0" --silent --show-error "http://127.0.0.1:${port}/uploads" > "$resp_headers"
 
-expected_hash="d74981efa70a0c880b8d8c1985d075dbcbf679b99a5f9914e5aaf96b831a9e24"
+location=$(grep -i "Location:" "$resp_headers" | awk '{print $2}' | tr -d '\r\n')
+rm -f "$resp_headers"
 
-if [[ "$response" != *"\"hash\":\"$expected_hash\""* ]]; then
-    echo "Upload failed or wrong hash returned: $response" >&2
+if [[ -z "$location" ]]; then
+    echo "Failed to get Location header for TUS session creation" >&2
     exit 1
 fi
 
-if [[ "$response" != *"\"status\":\"success\""* ]]; then
-    echo "Upload status not success: $response" >&2
+# 2. PATCH 上传分片数据
+patch_resp="$("$curl" --noproxy "*" -i -X PATCH -H "Content-Type: application/offset+octet-stream" -H "Upload-Offset: 0" -d "hello world" --silent --show-error "$location")"
+
+# 3. 轮询获取会话状态，提取最终哈希值
+expected_hash="d74981efa70a0c880b8d8c1985d075dbcbf679b99a5f9914e5aaf96b831a9e24"
+completed=false
+hash=""
+
+for _ in {1..50}; do
+    get_resp="$("$curl" --noproxy "*" --silent --show-error "$location")"
+    if [[ "$get_resp" == *"\"state\":\"COMPLETED\""* ]]; then
+        completed=true
+        hash=$(echo "$get_resp" | grep -o '"content_hash":"[^"]*' | cut -d'"' -f4 || true)
+        break
+    fi
+    sleep 0.05
+done
+
+if [[ "$completed" != "true" ]]; then
+    echo "Upload session failed to complete in time" >&2
+    exit 1
+fi
+
+if [[ "$hash" != "$expected_hash" ]]; then
+    echo "Hash mismatch! Expected: $expected_hash, Got: $hash" >&2
     exit 1
 fi
 

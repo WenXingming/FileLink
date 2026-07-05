@@ -77,7 +77,7 @@ protected:
 TEST_F(TusControlApiTest, OptionsReturnsCapabilities) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
-    ObjectService objectService(std::move(objectStore), "./storage_test");
+    ObjectService objectService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     soci::connection_pool dummyPool(1);
@@ -101,7 +101,7 @@ TEST_F(TusControlApiTest, OptionsReturnsCapabilities) {
 TEST_F(TusDatabaseApiTest, HeadReturnsOffsetForExistingSession) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
-    ObjectService objectService(std::move(objectStore), "./storage_test");
+    ObjectService objectService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
@@ -141,7 +141,7 @@ TEST_F(TusDatabaseApiTest, HeadReturnsOffsetForExistingSession) {
 TEST_F(TusDatabaseApiTest, HeadReturnsNotFoundForNonExistentSession) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
-    ObjectService objectService(std::move(objectStore), "./storage_test");
+    ObjectService objectService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
@@ -160,7 +160,7 @@ TEST_F(TusDatabaseApiTest, HeadReturnsNotFoundForNonExistentSession) {
 TEST_F(TusDatabaseApiTest, PostCreatesSessionAndReturns201) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
-    ObjectService objectService(std::move(objectStore), "./storage_test");
+    ObjectService objectService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
@@ -217,7 +217,7 @@ TEST_F(TusDatabaseApiTest, PostCreatesSessionAndReturns201) {
 TEST_F(TusDatabaseApiTest, PatchUploadsSequenceSuccessfully) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
-    ObjectService objectService(std::move(objectStore), "./storage_test");
+    ObjectService objectService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));

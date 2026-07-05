@@ -92,6 +92,19 @@ std::string bytes_to_hex(const std::string& bytes) {
     return ss.str();
 }
 
+std::string hex_to_bytes(const std::string& hex) {
+    std::string bytes;
+    bytes.reserve(hex.size() / 2);
+    for (std::size_t i = 0; i < hex.size(); i += 2) {
+        char high = hex[i];
+        char low = hex[i + 1];
+        int h = (high >= 'a') ? (high - 'a' + 10) : ((high >= 'A') ? (high - 'A' + 10) : (high - '0'));
+        int l = (low >= 'a') ? (low - 'a' + 10) : ((low >= 'A') ? (low - 'A' + 10) : (low - '0'));
+        bytes.push_back(static_cast<char>((h << 4) | l));
+    }
+    return bytes;
+}
+
 } // namespace
 
 UploadService::UploadService(soci::connection_pool& pool, std::string storageRoot, ObjectStore store)
@@ -182,7 +195,7 @@ bool UploadService::create_session(uint64_t totalSize, const std::string& metada
     return true;
 }
 
-int UploadService::write_session_chunk(const std::string& uploadIdHex, uint64_t clientOffset, const std::string& chunkData, uint64_t& out_newOffset) {
+UploadChunkResult UploadService::write_session_chunk(const std::string& uploadIdHex, uint64_t clientOffset, const std::string& chunkData, uint64_t& out_newOffset) {
     std::string uploadIdBinary = parse_upload_id_to_binary(uploadIdHex);
 
     try {
@@ -193,76 +206,28 @@ int UploadService::write_session_chunk(const std::string& uploadIdHex, uint64_t 
         store::UploadSessionStore sessionStore(sql);
         models::UploadSession session;
         if (!sessionStore.find(uploadIdBinary, session)) {
-            return 404;
+            return UploadChunkResult::SessionNotFound;
         }
 
-        if (session.committed_offset != clientOffset) {
-            return 409;
+        UploadChunkResult validation = validate_session_offset(session, clientOffset, chunkData.size());
+        if (validation != UploadChunkResult::Success) {
+            return validation;
         }
 
-        if (clientOffset + chunkData.size() > session.total_size) {
-            return 400;
+        if (!write_chunk_to_file(uploadIdHex, clientOffset, chunkData)) {
+            return UploadChunkResult::SystemError;
         }
 
-        struct stat rootSt;
-        if (::stat(storageRoot_.c_str(), &rootSt) != 0) {
-            if (::mkdir(storageRoot_.c_str(), 0755) != 0 && errno != EEXIST) {
-                return 500;
-            }
-        }
+        uint64_t newOffset = clientOffset + chunkData.size();
+        bool isComplete = (newOffset == session.total_size);
 
-        std::string uploadsDir = storageRoot_ + "/uploads";
-        struct stat st;
-        if (::stat(uploadsDir.c_str(), &st) != 0) {
-            if (::mkdir(uploadsDir.c_str(), 0755) != 0 && errno != EEXIST) {
-                return 500;
-            }
-        }
-
-        std::string partPath = uploadsDir + "/" + uploadIdHex + ".part";
-        
-        int flags = O_WRONLY | O_CREAT;
-        if (clientOffset == 0) {
-            flags |= O_TRUNC;
-        }
-        
-        int fd = ::open(partPath.c_str(), flags, 0644);
-        if (fd < 0) {
-            return 500;
-        }
-
-        if (clientOffset > 0) {
-            if (::lseek(fd, clientOffset, SEEK_SET) == -1) {
-                ::close(fd);
-                return 500;
-            }
-        }
-
-        if (!chunkData.empty()) {
-            ssize_t written = ::write(fd, chunkData.data(), chunkData.size());
-            if (written != static_cast<ssize_t>(chunkData.size())) {
-                ::close(fd);
-                return 500;
-            }
-        }
-
-        if (::fdatasync(fd) != 0) {
-            ::close(fd);
-            return 500;
-        }
-
-        ::close(fd);
-
-        sessionStore.update_offset(uploadIdBinary, clientOffset + chunkData.size());
-        
-        bool isComplete = (clientOffset + chunkData.size() == session.total_size);
+        sessionStore.update_offset(uploadIdBinary, newOffset);
         if (isComplete) {
             sessionStore.update_state(uploadIdBinary, "FINALIZING");
         }
 
         tr.commit();
-
-        out_newOffset = clientOffset + chunkData.size();
+        out_newOffset = newOffset;
 
         if (isComplete) {
             std::thread([this, uploadIdHex]() {
@@ -270,27 +235,112 @@ int UploadService::write_session_chunk(const std::string& uploadIdHex, uint64_t 
             }).detach();
         }
 
-        return 200;
+        return UploadChunkResult::Success;
     } catch (...) {
-        return 500;
+        return UploadChunkResult::SystemError;
     }
 }
 
 void UploadService::finalize_session(std::string uploadIdHex) {
     std::string uploadIdBinary = parse_upload_id_to_binary(uploadIdHex);
-    std::string partPath = storageRoot_ + "/uploads/" + uploadIdHex + ".part";
-    
+    std::string partPath = get_part_file_path(uploadIdHex);
+
     // 1. Compute BLAKE3
     std::string realHashHex;
+    if (!compute_file_hash(partPath, realHashHex)) {
+        mark_session_failed(uploadIdBinary, "Hashing failed");
+        return;
+    }
+
+    // 2. Compare with expected_hash (if set)
+    if (!verify_expected_hash(uploadIdBinary, realHashHex)) {
+        ::unlink(partPath.c_str());
+        return;
+    }
+
+    // 3. Commit to ObjectStore
+    if (!commit_to_object_store(partPath, realHashHex)) {
+        mark_session_failed(uploadIdBinary, "Failed to commit to store");
+        return;
+    }
+
+    // 4. Update completed state in db
+    mark_session_completed(uploadIdBinary, realHashHex);
+}
+
+// Atomic helpers for chunk write flow
+UploadChunkResult UploadService::validate_session_offset(const models::UploadSession& session, uint64_t clientOffset, uint64_t chunkSize) {
+    if (session.committed_offset != clientOffset) {
+        return UploadChunkResult::OffsetMismatch;
+    }
+    if (clientOffset + chunkSize > session.total_size) {
+        return UploadChunkResult::InvalidChunkSize;
+    }
+    return UploadChunkResult::Success;
+}
+
+bool UploadService::write_chunk_to_file(const std::string& uploadIdHex, uint64_t offset, const std::string& chunkData) {
+    struct stat rootSt;
+    if (::stat(storageRoot_.c_str(), &rootSt) != 0) {
+        if (::mkdir(storageRoot_.c_str(), 0755) != 0 && errno != EEXIST) {
+            return false;
+        }
+    }
+
+    std::string uploadsDir = storageRoot_ + "/uploads";
+    struct stat st;
+    if (::stat(uploadsDir.c_str(), &st) != 0) {
+        if (::mkdir(uploadsDir.c_str(), 0755) != 0 && errno != EEXIST) {
+            return false;
+        }
+    }
+
+    std::string partPath = get_part_file_path(uploadIdHex);
+    int flags = O_WRONLY | O_CREAT;
+    if (offset == 0) {
+        flags |= O_TRUNC;
+    }
+
+    int fd = ::open(partPath.c_str(), flags, 0644);
+    if (fd < 0) {
+        return false;
+    }
+
+    if (offset > 0) {
+        if (::lseek(fd, offset, SEEK_SET) == -1) {
+            ::close(fd);
+            return false;
+        }
+    }
+
+    if (!chunkData.empty()) {
+        ssize_t written = ::write(fd, chunkData.data(), chunkData.size());
+        if (written != static_cast<ssize_t>(chunkData.size())) {
+            ::close(fd);
+            return false;
+        }
+    }
+
+    if (::fdatasync(fd) != 0) {
+        ::close(fd);
+        return false;
+    }
+
+    ::close(fd);
+    return true;
+}
+
+// Atomic helpers for finalization flow
+bool UploadService::compute_file_hash(const std::string& partPath, std::string& out_hashHex) {
     try {
         std::ifstream ifs(partPath, std::ios::binary);
         if (!ifs) {
-            throw std::runtime_error("Failed to open part file for hashing");
+            return false;
         }
-        
+
         blake3_hasher hasher;
         blake3_hasher_init(&hasher);
-        
+
         char buffer[65536];
         while (ifs.read(buffer, sizeof(buffer))) {
             blake3_hasher_update(&hasher, buffer, ifs.gcount());
@@ -298,76 +348,73 @@ void UploadService::finalize_session(std::string uploadIdHex) {
         if (ifs.gcount() > 0) {
             blake3_hasher_update(&hasher, buffer, ifs.gcount());
         }
-        
+
         uint8_t hashOutput[BLAKE3_OUT_LEN];
         blake3_hasher_finalize(&hasher, hashOutput, BLAKE3_OUT_LEN);
-        
+
         std::stringstream ss;
         ss << std::hex << std::setfill('0');
         for (int i = 0; i < BLAKE3_OUT_LEN; ++i) {
             ss << std::setw(2) << static_cast<int>(hashOutput[i]);
         }
-        realHashHex = ss.str();
-    } catch (const std::exception& e) {
-        try {
-            SociSessionLease lease(pool_);
-            store::UploadSessionStore sessionStore(lease.get());
-            sessionStore.update_failed(uploadIdBinary, std::string("Hashing failed: ") + e.what());
-        } catch (...) {}
-        return;
+        out_hashHex = ss.str();
+        return true;
+    } catch (...) {
+        return false;
     }
+}
 
-    // 2. Compare with expected_hash (if set)
+bool UploadService::verify_expected_hash(const std::string& uploadIdBinary, const std::string& realHashHex) {
     try {
         SociSessionLease lease(pool_);
-        soci::session& sql = lease.get();
-        store::UploadSessionStore sessionStore(sql);
+        store::UploadSessionStore sessionStore(lease.get());
         models::UploadSession session;
         if (!sessionStore.find(uploadIdBinary, session)) {
-            return;
+            return false;
         }
-        
+
         if (session.has_expected_hash) {
-            std::string realHashBytes;
-            for (std::size_t i = 0; i < 64; i += 2) {
-                char high = realHashHex[i];
-                char low = realHashHex[i + 1];
-                int h = (high >= 'a') ? (high - 'a' + 10) : ((high >= 'A') ? (high - 'A' + 10) : (high - '0'));
-                int l = (low >= 'a') ? (low - 'a' + 10) : ((low >= 'A') ? (low - 'A' + 10) : (low - '0'));
-                realHashBytes.push_back(static_cast<char>((h << 4) | l));
-            }
-            
+            std::string realHashBytes = hex_to_bytes(realHashHex);
             if (session.expected_hash != realHashBytes) {
                 sessionStore.update_failed(uploadIdBinary, "BLAKE3 checksum mismatch");
-                ::unlink(partPath.c_str());
-                return;
+                return false;
             }
         }
-        
-        // 3. Commit to ObjectStore
-        CommitResult result = store_.commit(partPath, realHashHex);
-        if (result.status != CommitStatus::Created && result.status != CommitStatus::Reused) {
-            sessionStore.update_failed(uploadIdBinary, "Failed to commit to store");
-            return;
-        }
-        
-        // 4. Update completed state in db
-        std::string hashBytes;
-        for (std::size_t i = 0; i < 64; i += 2) {
-            char high = realHashHex[i];
-            char low = realHashHex[i + 1];
-            int h = (high >= 'a') ? (high - 'a' + 10) : ((high >= 'A') ? (high - 'A' + 10) : (high - '0'));
-            int l = (low >= 'a') ? (low - 'a' + 10) : ((low >= 'A') ? (low - 'A' + 10) : (low - '0'));
-            hashBytes.push_back(static_cast<char>((h << 4) | l));
-        }
-        sessionStore.update_completed(uploadIdBinary, hashBytes);
-    } catch (const std::exception& e) {
-        try {
-            SociSessionLease lease(pool_);
-            store::UploadSessionStore sessionStore(lease.get());
-            sessionStore.update_failed(uploadIdBinary, std::string("Commit failed: ") + e.what());
-        } catch (...) {}
+        return true;
+    } catch (...) {
+        return false;
     }
+}
+
+bool UploadService::commit_to_object_store(const std::string& partPath, const std::string& realHashHex) {
+    try {
+        CommitResult result = store_.commit(partPath, realHashHex);
+        return (result.status == CommitStatus::Created || result.status == CommitStatus::Reused);
+    } catch (...) {
+        return false;
+    }
+}
+
+void UploadService::mark_session_completed(const std::string& uploadIdBinary, const std::string& realHashHex) {
+    try {
+        SociSessionLease lease(pool_);
+        store::UploadSessionStore sessionStore(lease.get());
+        std::string hashBytes = hex_to_bytes(realHashHex);
+        sessionStore.update_completed(uploadIdBinary, hashBytes);
+    } catch (...) {}
+}
+
+void UploadService::mark_session_failed(const std::string& uploadIdBinary, const std::string& errorMsg) {
+    try {
+        SociSessionLease lease(pool_);
+        store::UploadSessionStore sessionStore(lease.get());
+        sessionStore.update_failed(uploadIdBinary, errorMsg);
+    } catch (...) {}
+}
+
+// Utility helpers
+std::string UploadService::get_part_file_path(const std::string& uploadIdHex) const {
+    return storageRoot_ + "/uploads/" + uploadIdHex + ".part";
 }
 
 } // namespace filelink

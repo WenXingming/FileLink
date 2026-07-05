@@ -28,8 +28,7 @@ int main(int argc, char* argv[]) {
         }
 
         // 初始化对象存储与业务服务
-        filelink::ObjectStore store(config.storageRoot);
-        filelink::ObjectService objectService(std::move(store), config.storageRoot);
+        filelink::ObjectService objectService(filelink::ObjectStore(config.storageRoot));
         filelink::StaticFileService staticFileService(config.webRoot);
         HttpServer server(config.listenAddress, config.port, config.ioThreads);
 

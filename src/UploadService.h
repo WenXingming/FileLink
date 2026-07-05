@@ -10,6 +10,14 @@ class connection_pool;
 
 namespace filelink {
 
+enum class UploadChunkResult {
+    Success,
+    SessionNotFound,
+    OffsetMismatch,
+    InvalidChunkSize,
+    SystemError
+};
+
 namespace models {
 struct UploadSession;
 }
@@ -55,12 +63,26 @@ public:
      * @param clientOffset 客户端声明的偏移量
      * @param chunkData 二进制数据块
      * @param out_newOffset 输出写入后最新的偏移量
-     * @return 业务状态码 (200 成功, 409 偏移不匹配, 400 参数越界, 404 会话未找到, 500 系统错误)
+     * @return 业务结果枚举 UploadChunkResult
      */
-    int write_session_chunk(const std::string& uploadIdHex, uint64_t clientOffset, const std::string& chunkData, uint64_t& out_newOffset);
+    UploadChunkResult write_session_chunk(const std::string& uploadIdHex, uint64_t clientOffset, const std::string& chunkData, uint64_t& out_newOffset);
 
 private:
     void finalize_session(std::string uploadIdHex);
+
+    // Atomic helpers for chunk write flow
+    UploadChunkResult validate_session_offset(const models::UploadSession& session, uint64_t clientOffset, uint64_t chunkSize);
+    bool write_chunk_to_file(const std::string& uploadIdHex, uint64_t offset, const std::string& chunkData);
+
+    // Atomic helpers for finalization flow
+    bool compute_file_hash(const std::string& partPath, std::string& out_hashHex);
+    bool verify_expected_hash(const std::string& uploadIdBinary, const std::string& realHashHex);
+    bool commit_to_object_store(const std::string& partPath, const std::string& realHashHex);
+    void mark_session_completed(const std::string& uploadIdBinary, const std::string& realHashHex);
+    void mark_session_failed(const std::string& uploadIdBinary, const std::string& errorMsg);
+
+    // Utility helpers
+    std::string get_part_file_path(const std::string& uploadIdHex) const;
 
 private:
     soci::connection_pool& pool_;

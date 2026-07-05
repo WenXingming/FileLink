@@ -18,13 +18,6 @@ HttpResponse ApiResponseView::health_check() {
     return json(200, R"({"status":"ok"})");
 }
 
-HttpResponse ApiResponseView::upload_success(const UploadResult& result, const std::string& host) {
-    std::string shareUrl = "http://" + host + "/objects/" + result.hash + result.extension;
-    std::string respBody = "{\"status\":\"success\",\"hash\":\"" + result.hash + 
-                           "\",\"result\":\"" + result.status + "\",\"url\":\"" + shareUrl + "\"}";
-    return json(200, respBody);
-}
-
 HttpResponse ApiResponseView::error(int statusCode, const std::string& message) {
     std::string escapedMessage = escape_json(message);
     std::string respBody = "{\"status\":\"error\",\"message\":\"" + escapedMessage + "\"}";

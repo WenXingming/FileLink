@@ -40,12 +40,37 @@ for _ in {1..50}; do
 done
 
 test_data="Hello FileLink Download! $$"
-# 1. 上传文件获取 hash
-upload_resp="$("$curl" --noproxy "*" -X POST -d "$test_data" --silent --show-error "http://127.0.0.1:${port}/upload")"
-hash=$(echo "$upload_resp" | grep -o '"hash":"[^"]*' | cut -d'"' -f4 || true)
+# 1. 上传文件获取 hash (采用 TUS 协议)
+resp_headers=$(mktemp)
+"$curl" --noproxy "*" -i -X POST -H "Upload-Length: ${#test_data}" -H "Upload-Metadata: filename ZG93bmxvYWQudHh0" --silent --show-error "http://127.0.0.1:${port}/uploads" > "$resp_headers"
 
-if [[ -z "$hash" ]]; then
-    echo "Upload failed, could not parse hash from: $upload_resp" >&2
+location=$(grep -i "Location:" "$resp_headers" | awk '{print $2}' | tr -d '\r\n')
+rm -f "$resp_headers"
+
+if [[ -z "$location" ]]; then
+    echo "Failed to get Location header for TUS session creation" >&2
+    exit 1
+fi
+
+# PATCH 上传分片数据
+patch_resp="$("$curl" --noproxy "*" -i -X PATCH -H "Content-Type: application/offset+octet-stream" -H "Upload-Offset: 0" -d "$test_data" --silent --show-error "$location")"
+
+# 轮询获取会话状态，提取最终哈希值
+completed=false
+hash=""
+
+for _ in {1..50}; do
+    get_resp="$("$curl" --noproxy "*" --silent --show-error "$location")"
+    if [[ "$get_resp" == *"\"state\":\"COMPLETED\""* ]]; then
+        completed=true
+        hash=$(echo "$get_resp" | grep -o '"content_hash":"[^"]*' | cut -d'"' -f4 || true)
+        break
+    fi
+    sleep 0.05
+done
+
+if [[ "$completed" != "true" || -z "$hash" ]]; then
+    echo "Upload session failed to complete or hash is empty" >&2
     exit 1
 fi
 
