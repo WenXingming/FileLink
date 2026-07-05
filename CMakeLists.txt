@@ -9,7 +9,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(FetchContent)
 
 option(FILELINK_BUILD_DEDUP_TOOL "构建离线去重命令行工具" ON)
-option(FILELINK_BUILD_TESTS "构建当前稳定模块的测试" OFF)
+option(FILELINK_BUILD_TESTS "构建不依赖外部服务的单元测试" OFF)
+option(FILELINK_BUILD_INTEGRATION_TESTS "构建需要 MySQL 或运行服务的集成测试" OFF)
 option(FILELINK_BUILD_BENCHMARKS "构建当前稳定模块的性能基准" OFF)
 
 # FileLink 测试由 FILELINK_BUILD_TESTS 控制，不把第三方项目的测试混入 CTest。
@@ -107,7 +108,7 @@ endif()
 
 add_subdirectory(src)
 
-if(FILELINK_BUILD_TESTS)
+if(FILELINK_BUILD_TESTS OR FILELINK_BUILD_INTEGRATION_TESTS)
     enable_testing()
 
     if(NOT TARGET GTest::gtest_main)
@@ -129,4 +130,3 @@ endif()
 if(FILELINK_BUILD_BENCHMARKS)
     # add_subdirectory(benchmarks/dedup)
 endif()
-

@@ -1,4 +1,5 @@
 #include "ApiRouter.h"
+#include "MySqlTestConfig.h"
 #include "ObjectService.h"
 #include "StaticFileService.h"
 #include "UploadService.h"
@@ -10,7 +11,7 @@
 #include <soci/connection-pool.h>
 #include <soci/mysql/soci-mysql.h>
 #include <gtest/gtest.h>
-#include <cstdlib>
+#include <exception>
 #include <memory>
 #include <ctime>
 #include <fstream>
@@ -24,30 +25,6 @@ namespace filelink {
 
 class TusControlApiTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        const char* password = std::getenv("FILELINK_TEST_MYSQL_PASSWORD");
-        std::string pass = password ? password : "12345678";
-        std::string host = "127.0.0.1";
-        std::string port = "3306";
-        if (std::getenv("FILELINK_TEST_MYSQL_PORT")) {
-            port = std::getenv("FILELINK_TEST_MYSQL_PORT");
-        }
-
-        std::string connStr = "db=filelink user=filelink password=" + pass + " host=" + host + " port=" + port;
-        try {
-            pool = std::make_unique<soci::connection_pool>(1);
-            pool->at(0).open(soci::mysql, connStr);
-
-            soci::session sql(*pool);
-            sql << "DELETE FROM upload_sessions";
-            db_ok = true;
-        }
-        catch (const soci::soci_error& e) {
-            std::cerr << "SOCI connection failed in test setup: " << e.what() << std::endl;
-            db_ok = false;
-        }
-    }
-
     void call_handle_tus_options(ApiRouter& router, const HttpRequest& req, HttpResponse& resp) {
         router.handle_tus_options(req, resp);
     }
@@ -63,9 +40,38 @@ protected:
     void call_handle_tus_get_session(ApiRouter& router, const HttpRequest& req, HttpResponse& resp) {
         router.handle_tus_get_session(req, resp);
     }
+};
+
+class TusDatabaseApiTest : public TusControlApiTest {
+protected:
+    void SetUp() override {
+        try {
+            pool = std::make_unique<soci::connection_pool>(1);
+            pool->at(0).open(soci::mysql, test::mysql_connection_string());
+
+            soci::session sql(*pool);
+            sql << "DELETE FROM upload_sessions";
+        }
+        catch (const std::exception& error) {
+            pool.reset();
+            FAIL() << "MySQL 集成测试初始化失败: " << error.what();
+        }
+    }
+
+    void TearDown() override {
+        if (pool == nullptr) {
+            return;
+        }
+        try {
+            soci::session sql(*pool);
+            sql << "DELETE FROM upload_sessions";
+        }
+        catch (const std::exception& error) {
+            ADD_FAILURE() << "MySQL 集成测试清理失败: " << error.what();
+        }
+    }
 
     std::unique_ptr<soci::connection_pool> pool;
-    bool db_ok = false;
 };
 
 TEST_F(TusControlApiTest, OptionsReturnsCapabilities) {
@@ -92,11 +98,7 @@ TEST_F(TusControlApiTest, OptionsReturnsCapabilities) {
     EXPECT_EQ(resp.get_headers().at("Tus-Extension"), "creation,expiration");
 }
 
-TEST_F(TusControlApiTest, HeadReturnsOffsetForExistingSession) {
-    if (!db_ok) {
-        GTEST_SKIP() << "Database not available for HEAD test";
-    }
-
+TEST_F(TusDatabaseApiTest, HeadReturnsOffsetForExistingSession) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
     ObjectService objectService(std::move(objectStore), "./storage_test");
@@ -136,11 +138,7 @@ TEST_F(TusControlApiTest, HeadReturnsOffsetForExistingSession) {
     EXPECT_EQ(resp.get_headers().at("Upload-Length"), "5000");
 }
 
-TEST_F(TusControlApiTest, HeadReturnsNotFoundForNonExistentSession) {
-    if (!db_ok) {
-        GTEST_SKIP() << "Database not available for HEAD test";
-    }
-
+TEST_F(TusDatabaseApiTest, HeadReturnsNotFoundForNonExistentSession) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
     ObjectService objectService(std::move(objectStore), "./storage_test");
@@ -159,11 +157,7 @@ TEST_F(TusControlApiTest, HeadReturnsNotFoundForNonExistentSession) {
     EXPECT_EQ(resp.get_status_code(), 404);
 }
 
-TEST_F(TusControlApiTest, PostCreatesSessionAndReturns201) {
-    if (!db_ok) {
-        GTEST_SKIP() << "Database not available for POST test";
-    }
-
+TEST_F(TusDatabaseApiTest, PostCreatesSessionAndReturns201) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
     ObjectService objectService(std::move(objectStore), "./storage_test");
@@ -220,11 +214,7 @@ TEST_F(TusControlApiTest, PostCreatesSessionAndReturns201) {
     EXPECT_EQ(session.expected_hash.size(), 32);
 }
 
-TEST_F(TusControlApiTest, PatchUploadsSequenceSuccessfully) {
-    if (!db_ok) {
-        GTEST_SKIP() << "Database not available for PATCH test";
-    }
-
+TEST_F(TusDatabaseApiTest, PatchUploadsSequenceSuccessfully) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
     ObjectService objectService(std::move(objectStore), "./storage_test");

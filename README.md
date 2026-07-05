@@ -64,11 +64,22 @@ cmake --build build -j4
 
 ### 3. 运行测试与启动服务
 
-构建完成后可以运行 CTest。当前测试集合仍包含需要 MySQL 的集成测试，后续会将单元测试与集成测试入口分开：
+默认只构建不依赖 MySQL 的单元测试：
 
 ```bash
-# 运行单元测试与集成检查
-ctest --test-dir build --output-on-failure
+ctest --test-dir build -L unit --output-on-failure
+```
+
+数据库和服务进程测试需要显式开启，并使用独立的测试环境变量：
+
+```bash
+cmake -S . -B build \
+    -DFILELINK_BUILD_TESTS=ON \
+    -DFILELINK_BUILD_INTEGRATION_TESTS=ON
+cmake --build build -j4
+
+FILELINK_TEST_MYSQL_PASSWORD=your-password \
+    ctest --test-dir build -L integration --output-on-failure
 ```
 
 开发环境统一使用下面的脚本启动。它会加载项目根目录的 `.env`，使用 `config/server.toml`，并把额外参数传给服务：

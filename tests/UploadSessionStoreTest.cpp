@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
+#include "MySqlTestConfig.h"
 #include "store/UploadSessionStore.h"
 #include <soci/soci.h>
 #include <soci/mysql/soci-mysql.h>
+
+#include <exception>
 #include <string>
 
 using namespace filelink;
@@ -11,26 +14,26 @@ using namespace filelink::models;
 class UploadSessionStoreTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // Connect to the test database (using hardcoded credentials for this test)
         try {
-            sql.open(soci::mysql, "db=filelink user=filelink password=12345678 host=127.0.0.1 port=3306");
-
-            // Clean up the table before tests
+            sql.open(soci::mysql, filelink::test::mysql_connection_string());
             sql << "DELETE FROM upload_sessions";
         }
-        catch (const soci::soci_error& e) {
-            std::cerr << "SOCI Error during setup: " << e.what() << std::endl;
-            // It's possible the database is not accessible during some test environments
-            // If the connection fails, tests will likely fail, but we'll print it here.
+        catch (const std::exception& error) {
+            FAIL() << "MySQL 集成测试初始化失败: " << error.what();
         }
     }
 
     void TearDown() override {
+        if (!sql.is_connected()) {
+            return;
+        }
         try {
             sql << "DELETE FROM upload_sessions";
             sql.close();
         }
-        catch (...) {}
+        catch (const std::exception& error) {
+            ADD_FAILURE() << "MySQL 集成测试清理失败: " << error.what();
+        }
     }
 
     soci::session sql;

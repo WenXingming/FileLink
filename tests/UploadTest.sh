@@ -4,6 +4,8 @@ set -euo pipefail
 
 server="$1"
 curl="$2"
+mysql_password="${FILELINK_TEST_MYSQL_PASSWORD:?集成测试需要设置 FILELINK_TEST_MYSQL_PASSWORD}"
+mysql_port="${FILELINK_TEST_MYSQL_PORT:-3306}"
 port=$((20000 + $$ % 20000))
 # 使用单独的 storage root 避免冲突
 storage_dir="/tmp/filelink_upload_test_$$"
@@ -11,7 +13,10 @@ log_file="/tmp/filelink_upload_health_$$.log"
 
 mkdir -p "$storage_dir"
 
-"$server" --address 127.0.0.1 --port "$port" --storage-root "$storage_dir" --io-threads 1 >"$log_file" 2>&1 &
+FILELINK_MYSQL_PASSWORD="$mysql_password" \
+    "$server" --address 127.0.0.1 --port "$port" \
+    --storage-root "$storage_dir" --io-threads 1 \
+    --mysql-port "$mysql_port" >"$log_file" 2>&1 &
 server_pid=$!
 
 cleanup() {
