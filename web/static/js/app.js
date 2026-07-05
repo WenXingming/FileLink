@@ -4,6 +4,7 @@ const uploadArea = document.getElementById('uploadArea');
         const fileName = document.getElementById('fileName');
         const fileSize = document.getElementById('fileSize');
         const uploadButton = document.getElementById('uploadButton');
+        const pauseButton = document.getElementById('pauseButton');
         const cancelButton = document.getElementById('cancelButton');
         const resultArea = document.getElementById('resultArea');
         const shareLink = document.getElementById('shareLink');
@@ -32,6 +33,8 @@ const uploadArea = document.getElementById('uploadArea');
 
         let selectedFile = null;
         let currentXhr = null;
+        let isCancelled = false;
+        let isPaused = false;
 
         const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024;
 
@@ -189,6 +192,7 @@ const uploadArea = document.getElementById('uploadArea');
             uploadButton.style.display = 'block';
             uploadButton.textContent = 'Start Upload';
 
+            pauseButton.style.display = 'none';
             cancelButton.style.display = 'none';
 
             updateAuthUI();
@@ -200,6 +204,8 @@ const uploadArea = document.getElementById('uploadArea');
                 currentXhr = null;
             }
 
+            isCancelled = false;
+            isPaused = false;
             selectedFile = null;
             fileInput.value = '';
             fileInfo.style.display = 'none';
@@ -351,77 +357,293 @@ const uploadArea = document.getElementById('uploadArea');
             uploadButton.disabled = true;
             uploadButton.textContent = 'Uploading...';
             uploadButton.style.display = 'none';
+            pauseButton.style.display = 'block';
             cancelButton.style.display = 'block';
 
-            currentXhr = new XMLHttpRequest();
-            currentXhr.open('POST', '/upload', true);
-
-            currentXhr.setRequestHeader('X-File-Name', encodeURIComponent(selectedFile.name));
-            currentXhr.setRequestHeader('Content-Type', selectedFile.type || 'application/octet-stream');
-            if (authEnabled && token) {
-                currentXhr.setRequestHeader('X-Auth-Token', token);
-            }
-
-            currentXhr.upload.onprogress = (e) => {
-                if (e.lengthComputable) {
-                    const percent = Math.round((e.loaded / e.total) * 100);
-                    progressBar.style.width = percent + '%';
-                    progressText.textContent = percent + '%';
-                }
-            };
-
-            currentXhr.onload = () => {
-                if (currentXhr.status >= 200 && currentXhr.status < 300) {
-                    try {
-                        const result = JSON.parse(currentXhr.responseText);
-                        if (result && result.url) {
-                            showSuccess(result.url);
-                        } else {
-                            throw new Error('返回数据格式错误');
-                        }
-                    } catch (e) {
-                        showError('解析响应失败: ' + e.message);
-                    }
-                } else {
-                    if (currentXhr.status === 401) {
-                        authEnabled = true;
-                        loginMode = 'password';
-                        updateAuthUI();
-                        showError('Please Log in First');
-                        finishUpload();
-                        return;
-                    }
-                    showError(`Upload failed (${currentXhr.status}): ${currentXhr.responseText}`);
-                }
-                finishUpload();
-            };
-
-            currentXhr.onerror = () => {
-                showError('Network error, please check your network');
-                finishUpload();
-            };
-
-            currentXhr.onabort = () => {
-                showError('Upload cancelled');
-                finishUpload();
-            };
-
-            currentXhr.send(selectedFile);
+            isCancelled = false;
+            isPaused = false;
+            startTusUpload(selectedFile, token);
         });
 
-        cancelButton.addEventListener('click', () => {
+        pauseButton.addEventListener('click', () => {
+            isPaused = true;
             if (currentXhr) {
                 currentXhr.abort();
                 currentXhr = null;
             }
         });
 
+        cancelButton.addEventListener('click', () => {
+            isCancelled = true;
+            if (currentXhr) {
+                currentXhr.abort();
+                currentXhr = null;
+            }
+            if (selectedFile) {
+                const fingerprint = `tus:${selectedFile.name}-${selectedFile.size}-${selectedFile.lastModified}`;
+                try {
+                    localStorage.removeItem(fingerprint);
+                } catch (_) {}
+            }
+            resetUploadDownloadPageState();
+        });
+
         function finishUpload() {
             currentXhr = null;
-            uploadButton.textContent = 'Start Upload';
+            const progress = parseFloat(progressBar.style.width || '0');
+            if (progress > 0 && progress < 100) {
+                uploadButton.textContent = 'Resume Upload';
+                cancelButton.style.display = 'block';
+            } else {
+                uploadButton.textContent = 'Start Upload';
+                cancelButton.style.display = 'none';
+            }
             uploadButton.disabled = false;
             uploadButton.style.display = 'block';
-            cancelButton.style.display = 'none';
+            pauseButton.style.display = 'none';
+        }
+
+        async function startTusUpload(file, token) {
+            const fingerprint = `tus:${file.name}-${file.size}-${file.lastModified}`;
+            let sessionUrl = null;
+            
+            try {
+                sessionUrl = localStorage.getItem(fingerprint);
+            } catch (_) {}
+
+            let offset = 0;
+
+            if (sessionUrl) {
+                try {
+                    offset = await getTusSessionOffset(sessionUrl, token);
+                } catch (e) {
+                    sessionUrl = null;
+                    try {
+                        localStorage.removeItem(fingerprint);
+                    } catch (_) {}
+                }
+            }
+
+            if (!sessionUrl) {
+                try {
+                    sessionUrl = await createTusSession(file, token);
+                    try {
+                        localStorage.setItem(fingerprint, sessionUrl);
+                    } catch (_) {}
+                    offset = 0;
+                } catch (e) {
+                    showError('Failed to create upload session: ' + e.message);
+                    finishUpload();
+                    return;
+                }
+            }
+
+            const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunk
+            const totalSize = file.size;
+
+            while (offset < totalSize && !isCancelled && !isPaused) {
+                const chunkEnd = Math.min(offset + CHUNK_SIZE, totalSize);
+                const chunk = file.slice(offset, chunkEnd);
+                
+                try {
+                    offset = await uploadTusChunk(sessionUrl, chunk, offset, totalSize, token);
+                    const percent = Math.round((offset / totalSize) * 100);
+                    progressBar.style.width = percent + '%';
+                    progressText.textContent = percent + '%';
+                } catch (e) {
+                    if (isPaused) {
+                        finishUpload();
+                        isPaused = false;
+                        return;
+                    }
+                    if (isCancelled) {
+                        isCancelled = false;
+                        return;
+                    }
+                    showError('Upload failed: ' + e.message);
+                    finishUpload();
+                    return;
+                }
+            }
+
+            if (isPaused) {
+                finishUpload();
+                isPaused = false;
+                return;
+            }
+            if (isCancelled) {
+                isCancelled = false;
+                return;
+            }
+
+            progressBar.style.width = '99%';
+            progressText.textContent = '99% (Server finalization...)';
+            
+            try {
+                const finalUrl = await pollTusStatus(sessionUrl, token);
+                try {
+                    localStorage.removeItem(fingerprint);
+                } catch (_) {}
+                showSuccess(finalUrl);
+            } catch (e) {
+                showError('Finalization failed: ' + e.message);
+            } finally {
+                finishUpload();
+            }
+        }
+
+        function createTusSession(file, token) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/uploads', true);
+                xhr.setRequestHeader('Tus-Resumable', '1.0.0');
+                xhr.setRequestHeader('Upload-Length', file.size.toString());
+                xhr.setRequestHeader('Upload-Metadata', `filename ${btoa(unescape(encodeURIComponent(file.name)))}`);
+                if (authEnabled && token) {
+                    xhr.setRequestHeader('X-Auth-Token', token);
+                }
+                
+                xhr.onload = () => {
+                    if (xhr.status === 201) {
+                        const location = xhr.getResponseHeader('Location');
+                        if (location) {
+                            resolve(location);
+                        } else {
+                            reject(new Error('Missing Location header in response'));
+                        }
+                    } else if (xhr.status === 401) {
+                        authEnabled = true;
+                        loginMode = 'password';
+                        updateAuthUI();
+                        reject(new Error('Please log in first'));
+                    } else {
+                        reject(new Error(`Server returned ${xhr.status}: ${xhr.responseText}`));
+                    }
+                };
+                xhr.onerror = () => reject(new Error('Network error'));
+                xhr.send();
+            });
+        }
+
+        function getTusSessionOffset(sessionUrl, token) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('HEAD', sessionUrl, true);
+                xhr.setRequestHeader('Tus-Resumable', '1.0.0');
+                if (authEnabled && token) {
+                    xhr.setRequestHeader('X-Auth-Token', token);
+                }
+                
+                xhr.onload = () => {
+                    if (xhr.status === 200) {
+                        const offsetStr = xhr.getResponseHeader('Upload-Offset');
+                        if (offsetStr !== null) {
+                            resolve(parseInt(offsetStr, 10));
+                        } else {
+                            reject(new Error('Missing Upload-Offset header'));
+                        }
+                    } else {
+                        reject(new Error(`Session not found or server returned ${xhr.status}`));
+                    }
+                };
+                xhr.onerror = () => reject(new Error('Network error'));
+                xhr.send();
+            });
+        }
+
+        function uploadTusChunk(sessionUrl, chunk, offset, totalSize, token) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                currentXhr = xhr;
+                xhr.open('PATCH', sessionUrl, true);
+                xhr.setRequestHeader('Tus-Resumable', '1.0.0');
+                xhr.setRequestHeader('Upload-Offset', offset.toString());
+                xhr.setRequestHeader('Content-Type', 'application/offset+octet-stream');
+                if (authEnabled && token) {
+                    xhr.setRequestHeader('X-Auth-Token', token);
+                }
+                
+                // Track progress inside the chunk
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const currentLoaded = offset + e.loaded;
+                        const percent = Math.round((currentLoaded / totalSize) * 100);
+                        progressBar.style.width = percent + '%';
+                        progressText.textContent = percent + '%';
+                    }
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status === 204) {
+                        const newOffsetStr = xhr.getResponseHeader('Upload-Offset');
+                        if (newOffsetStr !== null) {
+                            resolve(parseInt(newOffsetStr, 10));
+                        } else {
+                            resolve(offset + chunk.size);
+                        }
+                    } else {
+                        reject(new Error(`Server returned ${xhr.status}: ${xhr.responseText}`));
+                    }
+                };
+                xhr.onerror = () => reject(new Error('Network error'));
+                xhr.send(chunk);
+            });
+        }
+
+        function pollTusStatus(sessionUrl, token) {
+            return new Promise((resolve, reject) => {
+                let attempts = 0;
+                const maxAttempts = 100;
+                
+                const check = () => {
+                    if (isCancelled || isPaused) {
+                        reject(new Error(isCancelled ? 'Upload cancelled' : 'Upload paused'));
+                        return;
+                    }
+                    
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('GET', sessionUrl, true);
+                    if (authEnabled && token) {
+                        xhr.setRequestHeader('X-Auth-Token', token);
+                    }
+                    
+                    xhr.onload = () => {
+                        if (xhr.status === 200) {
+                            try {
+                                const res = JSON.parse(xhr.responseText);
+                                if (res.state === 'COMPLETED') {
+                                    if (res.content_hash) {
+                                        const dotIdx = res.file_name.lastIndexOf('.');
+                                        const ext = dotIdx !== -1 ? res.file_name.substring(dotIdx) : '';
+                                        const host = window.location.host;
+                                        const shareUrl = `${window.location.protocol}//${host}/objects/${res.content_hash}${ext}`;
+                                        resolve(shareUrl);
+                                    } else {
+                                        reject(new Error('Completed session is missing content_hash'));
+                                    }
+                                } else if (res.state === 'FAILED') {
+                                    reject(new Error(res.failure_reason || 'Verification failed on server'));
+                                } else {
+                                    attempts++;
+                                    if (attempts >= maxAttempts) {
+                                        reject(new Error('Server finalization timeout'));
+                                    } else {
+                                        setTimeout(check, 200);
+                                    }
+                                }
+                            } catch (e) {
+                                reject(new Error('Failed to parse server status: ' + e.message));
+                            }
+                        } else {
+                            reject(new Error(`Server status returned ${xhr.status}`));
+                        }
+                    };
+                    xhr.onerror = () => reject(new Error('Network error polling status'));
+                    xhr.send();
+                };
+                
+                setTimeout(check, 100);
+            });
         }
 
         loginButton.addEventListener('click', () => {

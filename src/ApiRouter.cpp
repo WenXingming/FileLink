@@ -10,12 +10,17 @@
 #include <sys/stat.h>
 #include <utility>
 
+#include "UploadService.h"
+#include "models/UploadSession.h"
+#include <cstdlib>
+
 namespace filelink {
 
-ApiRouter::ApiRouter(HttpServer& server, ObjectService& objectService, StaticFileService& staticFileService)
+ApiRouter::ApiRouter(HttpServer& server, ObjectService& objectService, StaticFileService& staticFileService, UploadService& uploadService)
     : server_(server),
     objectService_(objectService),
-    staticFileService_(staticFileService) {
+    staticFileService_(staticFileService),
+    uploadService_(uploadService) {
 }
 
 void ApiRouter::register_routes() {
@@ -33,6 +38,27 @@ void ApiRouter::register_routes() {
 
     server_.add_post_route("/upload", [this](const HttpRequest& req, HttpResponse& res) {
         this->handle_upload(req, res);
+        });
+
+    server_.add_route("OPTIONS", "/uploads", [this](const HttpRequest& req, HttpResponse& res) {
+        this->handle_tus_options(req, res);
+        });
+
+    server_.add_prefix_route("/uploads/", [this](const HttpRequest& req, HttpResponse& res) {
+        std::string method = req.get_method();
+        if (method == "HEAD") {
+            this->handle_tus_head(req, res);
+        } else if (method == "PATCH") {
+            this->handle_tus_patch(req, res);
+        } else if (method == "GET") {
+            this->handle_tus_get_session(req, res);
+        } else {
+            res = ApiResponseView::tus_error(405, "Method Not Allowed", "Method Not Allowed");
+        }
+        });
+
+    server_.add_post_route("/uploads", [this](const HttpRequest& req, HttpResponse& res) {
+        this->handle_tus_create(req, res);
         });
 
     server_.add_prefix_route("/objects/", [this](const HttpRequest& req, HttpResponse& res) {
@@ -131,6 +157,10 @@ void ApiRouter::handle_download(const HttpRequest& req, HttpResponse& response) 
     }
 }
 
+
+
+
+
 void ApiRouter::handle_static(const HttpRequest& req, HttpResponse& response) {
     try {
         // 1. Controller: 提取 URI
@@ -153,6 +183,171 @@ void ApiRouter::handle_static(const HttpRequest& req, HttpResponse& response) {
     }
     catch (const std::exception& ex) {
         response = ApiResponseView::error(404, ex.what());
+    }
+}
+
+void ApiRouter::handle_tus_options(const HttpRequest&, HttpResponse& response) {
+    response = ApiResponseView::tus_options();
+}
+
+void ApiRouter::handle_tus_head(const HttpRequest& req, HttpResponse& response) {
+    if (req.get_method() != "HEAD") {
+        response = ApiResponseView::tus_error(405, "Method Not Allowed", "Method Not Allowed");
+        return;
+    }
+
+    const std::string prefix = "/uploads/";
+    const std::string path = req.get_path();
+    if (path.size() <= prefix.size()) {
+        response = ApiResponseView::tus_error(400, "Bad Request", "Missing Upload ID");
+        return;
+    }
+
+    std::string uploadIdRaw = path.substr(prefix.size());
+    uint64_t offset = 0;
+    uint64_t totalSize = 0;
+
+    try {
+        if (!uploadService_.get_session_progress(uploadIdRaw, offset, totalSize)) {
+            response = ApiResponseView::tus_error(404, "Not Found", "Upload Session Not Found");
+            return;
+        }
+
+        response = ApiResponseView::tus_head(offset, totalSize);
+    }
+    catch (const std::exception& ex) {
+        response = ApiResponseView::tus_error(500, "Internal Server Error", ex.what());
+    }
+}
+
+void ApiRouter::handle_tus_create(const HttpRequest& req, HttpResponse& response) {
+    response.set_header("Tus-Resumable", "1.0.0");
+
+    if (req.get_method() != "POST") {
+        response = ApiResponseView::tus_error(405, "Method Not Allowed", "Method Not Allowed");
+        return;
+    }
+
+    std::string uploadLengthStr = req.get_header("Upload-Length");
+    if (uploadLengthStr.empty()) {
+        response = ApiResponseView::tus_error(400, "Bad Request", "Missing Upload-Length Header");
+        return;
+    }
+
+    uint64_t totalSize = 0;
+    try {
+        totalSize = std::stoull(uploadLengthStr);
+    } catch (...) {
+        response = ApiResponseView::tus_error(400, "Bad Request", "Invalid Upload-Length");
+        return;
+    }
+
+    if (totalSize > 10737418240ULL) { // 10GB limit
+        response = ApiResponseView::tus_error(413, "Payload Too Large", "Upload-Length Exceeds Limit");
+        return;
+    }
+
+    std::string metadata = req.get_header("Upload-Metadata");
+    std::string host = req.get_header("Host");
+    if (host.empty()) {
+        host = "127.0.0.1:8080";
+    }
+
+    try {
+        std::string uploadIdHex;
+        if (!uploadService_.create_session(totalSize, metadata, host, uploadIdHex)) {
+            response = ApiResponseView::tus_error(500, "Internal Server Error", "Failed to create session");
+            return;
+        }
+
+        response = ApiResponseView::tus_created(uploadIdHex, host);
+    }
+    catch (const std::exception& ex) {
+        response = ApiResponseView::tus_error(500, "Internal Server Error", ex.what());
+    }
+}
+
+void ApiRouter::handle_tus_patch(const HttpRequest& req, HttpResponse& response) {
+    response.set_header("Tus-Resumable", "1.0.0");
+
+    if (req.get_method() != "PATCH") {
+        response = ApiResponseView::tus_error(405, "Method Not Allowed", "Method Not Allowed");
+        return;
+    }
+
+    const std::string prefix = "/uploads/";
+    const std::string path = req.get_path();
+    if (path.size() <= prefix.size()) {
+        response = ApiResponseView::tus_error(400, "Bad Request", "Missing Upload ID");
+        return;
+    }
+    std::string uploadIdRaw = path.substr(prefix.size());
+
+    std::string contentType = req.get_header("Content-Type");
+    if (contentType != "application/offset+octet-stream") {
+        response = ApiResponseView::tus_error(415, "Unsupported Media Type", "Content-Type must be application/offset+octet-stream");
+        return;
+    }
+
+    std::string uploadOffsetStr = req.get_header("Upload-Offset");
+    if (uploadOffsetStr.empty()) {
+        response = ApiResponseView::tus_error(400, "Bad Request", "Missing Upload-Offset Header");
+        return;
+    }
+
+    uint64_t clientOffset = 0;
+    try {
+        clientOffset = std::stoull(uploadOffsetStr);
+    } catch (...) {
+        response = ApiResponseView::tus_error(400, "Bad Request", "Invalid Upload-Offset");
+        return;
+    }
+
+    try {
+        uint64_t newOffset = 0;
+        int rc = uploadService_.write_session_chunk(uploadIdRaw, clientOffset, req.get_body(), newOffset);
+        if (rc == 200) {
+            response = ApiResponseView::tus_patched(newOffset);
+        } else if (rc == 409) {
+            response = ApiResponseView::tus_error(409, "Conflict", "Offset Mismatch");
+        } else if (rc == 400) {
+            response = ApiResponseView::tus_error(400, "Bad Request", "Invalid Chunk Size or Range");
+        } else if (rc == 404) {
+            response = ApiResponseView::tus_error(404, "Not Found", "Upload Session Not Found");
+        } else {
+            response = ApiResponseView::tus_error(500, "Internal Server Error", "Chunk Write Failed");
+        }
+    }
+    catch (const std::exception& ex) {
+        response = ApiResponseView::tus_error(500, "Internal Server Error", ex.what());
+    }
+}
+
+void ApiRouter::handle_tus_get_session(const HttpRequest& req, HttpResponse& response) {
+    if (req.get_method() != "GET") {
+        response = ApiResponseView::tus_error(405, "Method Not Allowed", "Method Not Allowed");
+        return;
+    }
+
+    const std::string prefix = "/uploads/";
+    const std::string path = req.get_path();
+    if (path.size() <= prefix.size()) {
+        response = ApiResponseView::tus_error(400, "Bad Request", "Missing Upload ID");
+        return;
+    }
+    std::string uploadIdRaw = path.substr(prefix.size());
+
+    try {
+        models::UploadSession session;
+        if (!uploadService_.get_session(uploadIdRaw, session)) {
+            response = ApiResponseView::tus_error(404, "Not Found", "Upload Session Not Found");
+            return;
+        }
+
+        response = ApiResponseView::tus_session_status(session);
+    }
+    catch (const std::exception& ex) {
+        response = ApiResponseView::tus_error(500, "Internal Server Error", ex.what());
     }
 }
 

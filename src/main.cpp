@@ -3,7 +3,11 @@
 #include "ObjectService.h"
 #include "StaticFileService.h"
 #include "ApiRouter.h"
+#include "UploadService.h"
 #include "tudou/http/HttpServer.h"
+#include <soci/soci.h>
+#include <soci/connection-pool.h>
+#include <soci/mysql/soci-mysql.h>
 
 #include <exception>
 #include <iostream>
@@ -27,9 +31,24 @@ int main(int argc, char* argv[]) {
         filelink::ObjectService objectService(std::move(store), config.storageRoot);
         filelink::StaticFileService staticFileService(config.webRoot);
         HttpServer server(config.listenAddress, config.port, config.ioThreads);
+
+        // 初始化 SOCI 数据库连接池
+        std::size_t poolSize = config.mysql.poolSize > 0 ? config.mysql.poolSize : 5;
+        soci::connection_pool mysqlPool(poolSize);
+        std::string connStr = "db=" + config.mysql.database +
+                              " user=" + config.mysql.user +
+                              " password=" + config.mysql.password +
+                              " host=" + config.mysql.host +
+                              " port=" + std::to_string(config.mysql.port);
+        for (std::size_t i = 0; i < poolSize; ++i) {
+            mysqlPool.at(i).open(soci::mysql, connStr);
+        }
+
+        // 初始化上传业务服务
+        filelink::UploadService uploadService(mysqlPool, config.storageRoot, filelink::ObjectStore(config.storageRoot));
         
         // 挂载 API 路由模块
-        filelink::ApiRouter router(server, objectService, staticFileService);
+        filelink::ApiRouter router(server, objectService, staticFileService, uploadService);
         router.register_routes();
 
         server.start();

@@ -17,7 +17,7 @@ target_link_libraries(filelink_lib PUBLIC
     Tudou::tudou
     ${FILELINK_BLAKE3_TARGET}
 )
-target_link_libraries(filelink_lib PRIVATE
+target_link_libraries(filelink_lib PUBLIC
     PkgConfig::MySQLClient
     soci_core
     soci_mysql

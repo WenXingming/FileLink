@@ -56,5 +56,29 @@ bool UploadSessionStore::find(const std::string& upload_id, models::UploadSessio
     return true;
 }
 
+void UploadSessionStore::update_offset(const std::string& upload_id, uint64_t new_offset) {
+    sql_ << "UPDATE upload_sessions SET committed_offset = :offset WHERE upload_id = :id",
+            soci::use(new_offset),
+            soci::use(upload_id);
+}
+
+void UploadSessionStore::update_state(const std::string& upload_id, const std::string& state) {
+    sql_ << "UPDATE upload_sessions SET state = :state WHERE upload_id = :id",
+            soci::use(state),
+            soci::use(upload_id);
+}
+
+void UploadSessionStore::update_completed(const std::string& upload_id, const std::string& content_hash) {
+    sql_ << "UPDATE upload_sessions SET state = 'COMPLETED', content_hash = :hash WHERE upload_id = :id",
+            soci::use(content_hash),
+            soci::use(upload_id);
+}
+
+void UploadSessionStore::update_failed(const std::string& upload_id, const std::string& failure_reason) {
+    sql_ << "UPDATE upload_sessions SET state = 'FAILED', failure_reason = :reason WHERE upload_id = :id",
+            soci::use(failure_reason),
+            soci::use(upload_id);
+}
+
 } // namespace store
 } // namespace filelink

@@ -25,6 +25,7 @@ services:
   # ===============================================================================================
   mysql:
     image: mysql:8.0.44-debian
+    container_name: mysql-server
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD 未设置}
@@ -66,6 +67,7 @@ services:
   # ===============================================================================================
   redis:
     image: redis:latest
+    container_name: redis-server
     profiles: ["cache"] # docker compose --profile cache up -d redis
     restart: unless-stopped
     ports:
@@ -84,6 +86,7 @@ services:
   # ==============================================================================================
   nginx:
     image: nginx:trixie-perl
+    container_name: nginx-server
     profiles: ["proxy"] # docker compose --profile proxy up -d nginx
     restart: unless-stopped
     network_mode: host

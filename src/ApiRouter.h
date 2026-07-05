@@ -9,15 +9,19 @@
 
 namespace filelink {
 
+class UploadService;
+
 class ApiRouter {
+    friend class TusControlApiTest;
 public:
     /**
      * @brief 构造路由控制器
      * @param server 底层 HTTP 服务器实例
      * @param objectService 文件服务实例
      * @param staticFileService 静态资源服务实例
+     * @param uploadService 上传服务实例
      */
-    ApiRouter(HttpServer& server, ObjectService& objectService, StaticFileService& staticFileService);
+    ApiRouter(HttpServer& server, ObjectService& objectService, StaticFileService& staticFileService, UploadService& uploadService);
 
     /**
      * @brief 注册所有支持的 API 路由
@@ -31,6 +35,13 @@ private:
     void handle_upload(const HttpRequest& req, HttpResponse& response);
     void handle_download(const HttpRequest& req, HttpResponse& response);
     void handle_static(const HttpRequest& req, HttpResponse& response);
+    
+    // Tus API Handlers
+    void handle_tus_options(const HttpRequest& req, HttpResponse& response);
+    void handle_tus_head(const HttpRequest& req, HttpResponse& response);
+    void handle_tus_create(const HttpRequest& req, HttpResponse& response);
+    void handle_tus_patch(const HttpRequest& req, HttpResponse& response);
+    void handle_tus_get_session(const HttpRequest& req, HttpResponse& response);
 
 private:
     std::string infer_mime_type(const std::string& ext) const;
@@ -38,6 +49,7 @@ private:
     HttpServer& server_;
     ObjectService& objectService_;
     StaticFileService& staticFileService_;
+    UploadService& uploadService_;
 };
 
 } // namespace filelink
