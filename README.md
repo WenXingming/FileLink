@@ -27,7 +27,7 @@
 | --- | --- |
 | 存储引擎 | 基于 Blake3 的极速哈希计算、严格的 `fdatasync` + `link` CAS 原子发布、多线程无锁复用 |
 | 容灾与一致性 | Write-Ahead-Log 落盘协议，彻底防御机器掉电导致的“哈希占位毒化”问题 |
-| 数据库接入 | 原生 `libmysqlclient` 封装，提供基于智能指针和条件变量的极简自旋 RAII 连接池 |
+| 数据库接入 | 使用 SOCI 管理 SQL 绑定、事务和连接池，底层通过官方 `libmysqlclient` 连接 MySQL |
 | 高并发网络 | 强依赖底层 `Tudou` 框架 (基于 Epoll 的多线程 Reactor 模型) 提供 HTTP 协议接入和路由分发 |
 | 工程配套 | 极致优雅的 CMake FetchContent 构建系统、全流程 GTest 测试覆盖、Docker Compose 一键外围部署 |
 
@@ -111,7 +111,7 @@ flowchart TD
 
   subgraph DI ["Composition Root (main.cpp)"]
     direction LR
-    MySqlPool["MySqlPool\n(RAII 连接池)"]
+    DatabasePool["soci::connection_pool\n(MySQL 连接池)"]
   end
 
   subgraph Controllers ["Controllers / Routing"]
@@ -153,5 +153,5 @@ flowchart TD
 如果你打算深入阅读源码、准备相关岗位的面试，或者参与开源贡献，强烈建议先阅读我们留下的这些“硬核”设计文档：
 
 - [存储可靠性与去重设计](./docs/存储可靠性与去重设计-面试宝典.md)：详细解释了如何使用 `link()` 解决并发写入竞争，以及为何必须配合 `fdatasync` 和 `fsync` 的提交协议才能保证机器断电容灾。
-- [MySQL 客户端技术选型](./docs/MySQL客户端技术选型.md)：记录了我们为何最终抛弃臃肿的 Connector/C++，坚持使用 `libmysqlclient` 并自行封装极简 RAII 连接池的心路历程。
+- [为什么选择 SOCI](./docs/为什么选择SOCI.md)：说明为何使用成熟的数据访问层，而不重复实现连接池和客户端资源管理。
 - [可靠上传 V1 设计](./docs/可靠上传V1设计.md)：旧版架构和设计的梳理，用作后续 V2 大重构的对比。
