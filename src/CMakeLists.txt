@@ -10,7 +10,7 @@ file(GLOB_RECURSE FILELINK_HEADERS CONFIGURE_DEPENDS
 
 # 核心库：包含所有业务逻辑
 add_library(filelink_lib ${FILELINK_SOURCES} ${FILELINK_HEADERS})
-target_include_directories(filelink_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(filelink_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${soci_SOURCE_DIR}/include ${soci_BINARY_DIR}/include)
 target_compile_features(filelink_lib PUBLIC cxx_std_14)
 target_link_libraries(filelink_lib PUBLIC
     CLI11::CLI11
@@ -19,6 +19,8 @@ target_link_libraries(filelink_lib PUBLIC
 )
 target_link_libraries(filelink_lib PRIVATE
     PkgConfig::MySQLClient
+    soci_core
+    soci_mysql
 )
 
 # 在线服务可执行程序

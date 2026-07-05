@@ -9,7 +9,11 @@ add_executable(filelink_tests ${FILELINK_TEST_SOURCES})
 target_link_libraries(filelink_tests PRIVATE
     filelink_lib
     GTest::gtest_main
+    soci_core
+    soci_mysql
+    PkgConfig::MySQLClient
 )
+target_include_directories(filelink_tests PRIVATE ${soci_SOURCE_DIR}/include ${soci_BINARY_DIR}/include)
 
 # 自动发现 GoogleTest 测试用例
 include(GoogleTest)

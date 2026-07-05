@@ -79,6 +79,29 @@ if(NOT TARGET Tudou::tudou)
     FetchContent_MakeAvailable(Tudou)
 endif()
 
+# 引入 SOCI 库及 MySQL 后端
+if(NOT TARGET soci_core)
+    set(SOCI_TESTS OFF CACHE BOOL "" FORCE)
+    set(SOCI_CXX_C11 ON CACHE BOOL "" FORCE)
+    set(SOCI_EMPTY OFF CACHE BOOL "" FORCE)
+    set(SOCI_MYSQL ON CACHE BOOL "" FORCE)
+    set(SOCI_SQLITE3 OFF CACHE BOOL "" FORCE)
+    set(SOCI_POSTGRESQL OFF CACHE BOOL "" FORCE)
+    set(SOCI_STATIC ON CACHE BOOL "" FORCE)
+    
+    # 尝试让 SOCI 使用 pkg-config 找到的 MySQLClient 头文件路径
+    set(MYSQL_INCLUDE_DIR ${MySQLClient_INCLUDE_DIRS} CACHE PATH "" FORCE)
+    set(MYSQL_LIBRARIES ${MySQLClient_LIBRARIES} CACHE STRING "" FORCE)
+
+    FetchContent_Declare(
+        soci
+        GIT_REPOSITORY https://github.com/SOCI/soci.git
+        GIT_TAG v4.0.3
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(soci)
+endif()
+
 add_subdirectory(src)
 
 if(FILELINK_BUILD_TESTS)
@@ -103,3 +126,5 @@ endif()
 if(FILELINK_BUILD_BENCHMARKS)
     # add_subdirectory(benchmarks/dedup)
 endif()
+
+
