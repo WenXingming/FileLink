@@ -10,6 +10,8 @@
 # cd /home/wxm/FileLink && sudo docker compose stop
 # 重启容器：
 # cd /home/wxm/FileLink && sudo docker compose restart
+# 执行数据库迁移：
+# cd /home/wxm/FileLink && sudo docker compose run --rm migrate
 # 停止并删除容器：
 # cd /home/wxm/FileLink && sudo docker compose down
 #
@@ -40,6 +42,24 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  # ===============================================================================================
+  # --- 数据库迁移（一次性任务） ---
+  # ===============================================================================================
+  migrate:
+    image: ghcr.io/amacneil/dbmate:v2.33.0
+    restart: "no"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      # dbmate 只接受数据库 URL；开发密码应使用 URL-safe 字符。
+      DATABASE_URL: "mysql://filelink:${FILELINK_MYSQL_PASSWORD:?FILELINK_MYSQL_PASSWORD 未设置}@mysql:3306/filelink"
+      DBMATE_MIGRATIONS_DIR: /db/migrations
+      DBMATE_NO_DUMP_SCHEMA: "true"
+    volumes:
+      - ./db/migrations:/db/migrations:ro
+    command: ["--wait", "migrate"]
 
   # ===============================================================================================
   # --- Redis 服务 ---
