@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include "MySqlTestConfig.h"
-#include "store/UploadSessionStore.h"
+#include "db/UploadSession.h"
 #include <soci/soci.h>
 #include <soci/mysql/soci-mysql.h>
 
@@ -8,10 +8,9 @@
 #include <string>
 
 using namespace filelink;
-using namespace filelink::store;
-using namespace filelink::models;
+using namespace filelink::db;
 
-class UploadSessionStoreTest : public ::testing::Test {
+class UploadSessionDaoTest : public ::testing::Test {
 protected:
     void SetUp() override {
         try {
@@ -39,8 +38,8 @@ protected:
     soci::session sql;
 };
 
-TEST_F(UploadSessionStoreTest, CreateAndFindSession) {
-    UploadSessionStore store(sql);
+TEST_F(UploadSessionDaoTest, CreateAndFindSession) {
+    UploadSessionDao store(sql);
 
     UploadSession session;
     session.upload_id = "1234567890123456"; // 16 bytes for BINARY(16)
@@ -77,8 +76,8 @@ TEST_F(UploadSessionStoreTest, CreateAndFindSession) {
     EXPECT_FALSE(found.has_failure_reason);
 }
 
-TEST_F(UploadSessionStoreTest, CannotCreateWithOffsetGreaterThanTotalSize) {
-    UploadSessionStore store(sql);
+TEST_F(UploadSessionDaoTest, CannotCreateWithOffsetGreaterThanTotalSize) {
+    UploadSessionDao store(sql);
 
     UploadSession session;
     session.upload_id = "abcdefghijklmnop";

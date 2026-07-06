@@ -4,7 +4,6 @@ if(FILELINK_BUILD_TESTS)
     add_executable(filelink_unit_tests
         AppConfigTests.cpp
         ObjectStoreTests.cpp
-        StreamUploaderTests.cpp
     )
     target_link_libraries(filelink_unit_tests PRIVATE
         filelink_lib
@@ -20,7 +19,7 @@ endif()
 if(FILELINK_BUILD_INTEGRATION_TESTS)
     add_executable(filelink_integration_tests
         TusControlApiTest.cpp
-        UploadSessionStoreTest.cpp
+        UploadSessionDaoTest.cpp
     )
     target_link_libraries(filelink_integration_tests PRIVATE
         filelink_lib

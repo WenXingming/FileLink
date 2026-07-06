@@ -4,6 +4,7 @@
 #include <string>
 
 namespace filelink {
+namespace db {
 
 struct MySqlConfig {
     std::string host = "127.0.0.1";
@@ -15,4 +16,5 @@ struct MySqlConfig {
     unsigned int poolSize = 5;
 };
 
+} // namespace db
 } // namespace filelink

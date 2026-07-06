@@ -1,12 +1,12 @@
 #include "ApiRouter.h"
 #include "MySqlTestConfig.h"
-#include "ObjectService.h"
+#include "DownloadService.h"
 #include "StaticFileService.h"
 #include "UploadService.h"
 #include "tudou/http/HttpServer.h"
 #include "tudou/http/HttpRequest.h"
 #include "tudou/http/HttpResponse.h"
-#include "store/UploadSessionStore.h"
+#include "db/UploadSession.h"
 #include <soci/soci.h>
 #include <soci/connection-pool.h>
 #include <soci/mysql/soci-mysql.h>
@@ -18,8 +18,7 @@
 #include <thread>
 
 using namespace filelink;
-using namespace filelink::store;
-using namespace filelink::models;
+using namespace filelink::db;
 
 namespace filelink {
 
@@ -77,12 +76,13 @@ protected:
 TEST_F(TusControlApiTest, OptionsReturnsCapabilities) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
-    ObjectService objectService(std::move(objectStore));
+    DownloadService downloadService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     soci::connection_pool dummyPool(1);
     UploadService uploadService(dummyPool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, objectService, staticFileService, uploadService);
+
+    ApiRouter router(server, downloadService, staticFileService, uploadService);
 
     HttpRequest req;
     req.set_method("OPTIONS");
@@ -101,18 +101,18 @@ TEST_F(TusControlApiTest, OptionsReturnsCapabilities) {
 TEST_F(TusDatabaseApiTest, HeadReturnsOffsetForExistingSession) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
-    ObjectService objectService(std::move(objectStore));
+    DownloadService downloadService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, objectService, staticFileService, uploadService);
+    ApiRouter router(server, downloadService, staticFileService, uploadService);
 
     std::string uploadIdBinary = "\x12\x34\x56\x78\x90\x12\x34\x56\x78\x90\x12\x34\x56\x78\x90\x12";
     std::string uploadIdHex = "12345678901234567890123456789012";
 
     {
         soci::session sql(*pool);
-        UploadSessionStore store(sql);
+        UploadSessionDao store(sql);
         UploadSession session;
         session.upload_id = uploadIdBinary;
         session.state = "UPLOADING";
@@ -141,11 +141,11 @@ TEST_F(TusDatabaseApiTest, HeadReturnsOffsetForExistingSession) {
 TEST_F(TusDatabaseApiTest, HeadReturnsNotFoundForNonExistentSession) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
-    ObjectService objectService(std::move(objectStore));
+    DownloadService downloadService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, objectService, staticFileService, uploadService);
+    ApiRouter router(server, downloadService, staticFileService, uploadService);
 
     HttpRequest req;
     req.set_method("HEAD");
@@ -160,11 +160,11 @@ TEST_F(TusDatabaseApiTest, HeadReturnsNotFoundForNonExistentSession) {
 TEST_F(TusDatabaseApiTest, PostCreatesSessionAndReturns201) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
-    ObjectService objectService(std::move(objectStore));
+    DownloadService downloadService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, objectService, staticFileService, uploadService);
+    ApiRouter router(server, downloadService, staticFileService, uploadService);
 
     HttpRequest req;
     req.set_method("POST");
@@ -201,7 +201,7 @@ TEST_F(TusDatabaseApiTest, PostCreatesSessionAndReturns201) {
     }
 
     soci::session sql(*pool);
-    UploadSessionStore store(sql);
+    UploadSessionDao store(sql);
     UploadSession session;
     bool found = store.find(uuidBinary, session);
     ASSERT_TRUE(found);
@@ -217,11 +217,11 @@ TEST_F(TusDatabaseApiTest, PostCreatesSessionAndReturns201) {
 TEST_F(TusDatabaseApiTest, PatchUploadsSequenceSuccessfully) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
-    ObjectService objectService(std::move(objectStore));
+    DownloadService downloadService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, objectService, staticFileService, uploadService);
+    ApiRouter router(server, downloadService, staticFileService, uploadService);
 
     HttpRequest postReq;
     postReq.set_method("POST");
@@ -288,7 +288,7 @@ TEST_F(TusDatabaseApiTest, PatchUploadsSequenceSuccessfully) {
     ASSERT_TRUE(completed);
     ASSERT_EQ(contentHashHex.size(), 64);
 
-    std::string objectPath = objectService.get_object_path(contentHashHex);
+    std::string objectPath = downloadService.get_object_path(contentHashHex);
     std::ifstream ifs(objectPath, std::ios::binary);
     ASSERT_TRUE(ifs.is_open());
     std::string objectContent((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());

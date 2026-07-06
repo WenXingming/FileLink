@@ -1,21 +1,19 @@
-#include "ObjectService.h"
-#include "StreamUploader.h"
-#include <chrono>
+#include "DownloadService.h"
 #include <fstream>
-#include <sys/stat.h>
 #include <stdexcept>
+#include <sys/stat.h>
 
 namespace filelink {
 
-ObjectService::ObjectService(ObjectStore store)
+DownloadService::DownloadService(ObjectStore store)
     : store_(std::move(store)) {
 }
 
-std::string ObjectService::get_object_path(const std::string& contentHash) const {
+std::string DownloadService::get_object_path(const std::string& contentHash) const {
     return store_.get_object_path(contentHash);
 }
 
-std::string ObjectService::get_object_content(const std::string& contentHash) const {
+std::string DownloadService::get_object_content(const std::string& contentHash) const {
     std::string objectPath = store_.get_object_path(contentHash);
 
     struct stat info;

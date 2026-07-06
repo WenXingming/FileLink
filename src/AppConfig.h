@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "MySqlConfig.h"
+#include "db/MySqlConfig.h"
 
 namespace filelink {
 
@@ -16,7 +16,7 @@ struct AppConfig {
     std::string webRoot = "./web";
     std::string logRoot = "./logs";
 
-    MySqlConfig mysql;
+    db::MySqlConfig mysql;
 };
 
 AppConfig parse_app_config(const std::vector<std::string>& args);

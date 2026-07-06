@@ -18,7 +18,7 @@ enum class UploadChunkResult {
     SystemError
 };
 
-namespace models {
+namespace db {
 struct UploadSession;
 }
 
@@ -45,7 +45,7 @@ public:
      * @param out_session 输出会话模型
      * @return 是否成功找到
      */
-    bool get_session(const std::string& uploadIdHex, models::UploadSession& out_session);
+    bool get_session(const std::string& uploadIdHex, db::UploadSession& out_session);
 
     /**
      * @brief 创建一个新的上传会话
@@ -71,7 +71,7 @@ private:
     void finalize_session(std::string uploadIdHex);
 
     // Atomic helpers for chunk write flow
-    UploadChunkResult validate_session_offset(const models::UploadSession& session, uint64_t clientOffset, uint64_t chunkSize);
+    UploadChunkResult validate_session_offset(const db::UploadSession& session, uint64_t clientOffset, uint64_t chunkSize);
     bool write_chunk_to_file(const std::string& uploadIdHex, uint64_t offset, const std::string& chunkData);
 
     // Atomic helpers for finalization flow

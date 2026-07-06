@@ -5,7 +5,7 @@
 
 namespace filelink {
 
-namespace models {
+namespace db {
 struct UploadSession;
 }
 
@@ -27,7 +27,7 @@ public:
     static HttpResponse tus_created(const std::string& uploadIdHex, const std::string& host);
     static HttpResponse tus_patched(uint64_t offset);
     static HttpResponse tus_error(int statusCode, const std::string& statusMessage, const std::string& message);
-    static HttpResponse tus_session_status(const models::UploadSession& session);
+    static HttpResponse tus_session_status(const db::UploadSession& session);
     
 private:
     // 提取的静态方法：推断 MIME 类型

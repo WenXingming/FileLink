@@ -1,5 +1,5 @@
 #include "ApiResponseView.h"
-#include "models/UploadSession.h"
+#include "db/UploadSession.h"
 #include <sstream>
 #include <iomanip>
 
@@ -107,7 +107,7 @@ HttpResponse ApiResponseView::tus_error(int statusCode, const std::string& statu
     return response;
 }
 
-HttpResponse ApiResponseView::tus_session_status(const models::UploadSession& session) {
+HttpResponse ApiResponseView::tus_session_status(const db::UploadSession& session) {
     std::string uploadIdHex;
     {
         std::stringstream ss;

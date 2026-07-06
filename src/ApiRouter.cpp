@@ -11,14 +11,14 @@
 #include <utility>
 
 #include "UploadService.h"
-#include "models/UploadSession.h"
+#include "db/UploadSession.h"
 #include <cstdlib>
 
 namespace filelink {
 
-ApiRouter::ApiRouter(HttpServer& server, ObjectService& objectService, StaticFileService& staticFileService, UploadService& uploadService)
+ApiRouter::ApiRouter(HttpServer& server, DownloadService& downloadService, StaticFileService& staticFileService, UploadService& uploadService)
     : server_(server),
-    objectService_(objectService),
+    downloadService_(downloadService),
     staticFileService_(staticFileService),
     uploadService_(uploadService) {
 }
@@ -116,8 +116,8 @@ void ApiRouter::handle_download(const HttpRequest& req, HttpResponse& response) 
     try {
         // 1. Controller: 提取参数已完成 (hash, ext)
 
-        // 2. Model: 调 ObjectService 拿业务对象数据
-        std::string content = objectService_.get_object_content(hash);
+        // 2. Model: 调 DownloadService 拿业务对象数据
+        std::string content = downloadService_.get_object_content(hash);
 
         // 3. View: 调 View 渲染二进制文件响应
         response = ApiResponseView::file(content, ext);
@@ -311,7 +311,7 @@ void ApiRouter::handle_tus_get_session(const HttpRequest& req, HttpResponse& res
     std::string uploadIdRaw = path.substr(prefix.size());
 
     try {
-        models::UploadSession session;
+        db::UploadSession session;
         if (!uploadService_.get_session(uploadIdRaw, session)) {
             response = ApiResponseView::tus_error(404, "Not Found", "Upload Session Not Found");
             return;

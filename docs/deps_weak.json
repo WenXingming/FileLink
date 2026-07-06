@@ -6,24 +6,18 @@
     "src/ApiResponseView.h",
     "src/ApiRouter.h",
     "src/AppConfig.h",
-    "src/MySqlConfig.h",
-    "src/ObjectService.h",
+    "src/DownloadService.h",
     "src/ObjectStore.h",
     "src/StaticFileService.h",
-    "src/StreamUploader.h",
     "src/UploadService.h",
-    "src/main.cpp",
-    "src/models/UploadSession.h",
-    "src/store/UploadSessionStore.h"
+    "src/db/MySqlConfig.h",
+    "src/db/UploadSession.h",
+    "src/main.cpp"
   ],
   "edges": [
     {
       "source": "src/ApiResponseView.h",
-      "target": "src/ObjectService.h"
-    },
-    {
-      "source": "src/ApiResponseView.h",
-      "target": "src/models/UploadSession.h"
+      "target": "src/db/UploadSession.h"
     },
     {
       "source": "src/ApiRouter.h",
@@ -31,7 +25,7 @@
     },
     {
       "source": "src/ApiRouter.h",
-      "target": "src/ObjectService.h"
+      "target": "src/DownloadService.h"
     },
     {
       "source": "src/ApiRouter.h",
@@ -43,19 +37,15 @@
     },
     {
       "source": "src/ApiRouter.h",
-      "target": "src/models/UploadSession.h"
+      "target": "src/db/UploadSession.h"
     },
     {
       "source": "src/AppConfig.h",
-      "target": "src/MySqlConfig.h"
+      "target": "src/db/MySqlConfig.h"
     },
     {
-      "source": "src/ObjectService.h",
+      "source": "src/DownloadService.h",
       "target": "src/ObjectStore.h"
-    },
-    {
-      "source": "src/ObjectService.h",
-      "target": "src/StreamUploader.h"
     },
     {
       "source": "src/UploadService.h",
@@ -63,7 +53,7 @@
     },
     {
       "source": "src/UploadService.h",
-      "target": "src/store/UploadSessionStore.h"
+      "target": "src/db/UploadSession.h"
     },
     {
       "source": "src/main.cpp",
@@ -75,7 +65,7 @@
     },
     {
       "source": "src/main.cpp",
-      "target": "src/ObjectService.h"
+      "target": "src/DownloadService.h"
     },
     {
       "source": "src/main.cpp",
@@ -88,40 +78,33 @@
     {
       "source": "src/main.cpp",
       "target": "src/UploadService.h"
-    },
-    {
-      "source": "src/store/UploadSessionStore.h",
-      "target": "src/models/UploadSession.h"
     }
   ],
   "weak_edges": [
-    "src/main.cpp->src/ObjectStore.h",
-    "src/main.cpp->src/ObjectService.h",
     "src/main.cpp->src/StaticFileService.h",
+    "src/main.cpp->src/ApiRouter.h",
+    "src/main.cpp->src/DownloadService.h",
     "src/main.cpp->src/UploadService.h",
-    "src/main.cpp->src/ApiRouter.h"
+    "src/main.cpp->src/ObjectStore.h"
   ],
   "fan_in": {
     "src/ApiResponseView.h": 1,
     "src/ApiRouter.h": 1,
     "src/AppConfig.h": 1,
-    "src/MySqlConfig.h": 1,
-    "src/ObjectService.h": 3,
+    "src/DownloadService.h": 2,
     "src/ObjectStore.h": 3,
     "src/StaticFileService.h": 2,
-    "src/StreamUploader.h": 1,
     "src/UploadService.h": 2,
-    "src/models/UploadSession.h": 3,
-    "src/store/UploadSessionStore.h": 1
+    "src/db/MySqlConfig.h": 1,
+    "src/db/UploadSession.h": 3
   },
   "fan_out": {
-    "src/ApiResponseView.h": 2,
+    "src/ApiResponseView.h": 1,
     "src/ApiRouter.h": 5,
     "src/AppConfig.h": 1,
-    "src/ObjectService.h": 2,
+    "src/DownloadService.h": 1,
     "src/UploadService.h": 2,
-    "src/main.cpp": 6,
-    "src/store/UploadSessionStore.h": 1
+    "src/main.cpp": 6
   },
   "cycles": []
 }

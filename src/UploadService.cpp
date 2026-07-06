@@ -1,5 +1,5 @@
 #include "UploadService.h"
-#include "store/UploadSessionStore.h"
+#include "db/UploadSession.h"
 #include <soci/soci.h>
 #include <soci/connection-pool.h>
 #include <utility>
@@ -115,8 +115,8 @@ bool UploadService::get_session_progress(const std::string& uploadIdHex, uint64_
     std::string uploadIdBinary = parse_upload_id_to_binary(uploadIdHex);
     
     SociSessionLease lease(pool_);
-    store::UploadSessionStore sessionStore(lease.get());
-    models::UploadSession session;
+    db::UploadSessionDao sessionStore(lease.get());
+    db::UploadSession session;
     if (!sessionStore.find(uploadIdBinary, session)) {
         return false;
     }
@@ -126,11 +126,11 @@ bool UploadService::get_session_progress(const std::string& uploadIdHex, uint64_
     return true;
 }
 
-bool UploadService::get_session(const std::string& uploadIdHex, models::UploadSession& out_session) {
+bool UploadService::get_session(const std::string& uploadIdHex, db::UploadSession& out_session) {
     std::string uploadIdBinary = parse_upload_id_to_binary(uploadIdHex);
     
     SociSessionLease lease(pool_);
-    store::UploadSessionStore sessionStore(lease.get());
+    db::UploadSessionDao sessionStore(lease.get());
     return sessionStore.find(uploadIdBinary, out_session);
 }
 
@@ -161,9 +161,9 @@ bool UploadService::create_session(uint64_t totalSize, const std::string& metada
     out_uploadIdHex = bytes_to_hex(uploadIdBinary);
 
     SociSessionLease lease(pool_);
-    store::UploadSessionStore sessionStore(lease.get());
+    db::UploadSessionDao sessionStore(lease.get());
 
-    models::UploadSession session;
+    db::UploadSession session;
     session.upload_id = uploadIdBinary;
     session.state = "UPLOADING";
     session.file_name = filename.empty() ? ("upload_" + out_uploadIdHex + ".bin") : filename;
@@ -203,8 +203,8 @@ UploadChunkResult UploadService::write_session_chunk(const std::string& uploadId
         soci::session& sql = lease.get();
         soci::transaction tr(sql);
 
-        store::UploadSessionStore sessionStore(sql);
-        models::UploadSession session;
+        db::UploadSessionDao sessionStore(sql);
+        db::UploadSession session;
         if (!sessionStore.find(uploadIdBinary, session)) {
             return UploadChunkResult::SessionNotFound;
         }
@@ -269,7 +269,7 @@ void UploadService::finalize_session(std::string uploadIdHex) {
 }
 
 // Atomic helpers for chunk write flow
-UploadChunkResult UploadService::validate_session_offset(const models::UploadSession& session, uint64_t clientOffset, uint64_t chunkSize) {
+UploadChunkResult UploadService::validate_session_offset(const db::UploadSession& session, uint64_t clientOffset, uint64_t chunkSize) {
     if (session.committed_offset != clientOffset) {
         return UploadChunkResult::OffsetMismatch;
     }
@@ -367,8 +367,8 @@ bool UploadService::compute_file_hash(const std::string& partPath, std::string& 
 bool UploadService::verify_expected_hash(const std::string& uploadIdBinary, const std::string& realHashHex) {
     try {
         SociSessionLease lease(pool_);
-        store::UploadSessionStore sessionStore(lease.get());
-        models::UploadSession session;
+        db::UploadSessionDao sessionStore(lease.get());
+        db::UploadSession session;
         if (!sessionStore.find(uploadIdBinary, session)) {
             return false;
         }
@@ -398,7 +398,7 @@ bool UploadService::commit_to_object_store(const std::string& partPath, const st
 void UploadService::mark_session_completed(const std::string& uploadIdBinary, const std::string& realHashHex) {
     try {
         SociSessionLease lease(pool_);
-        store::UploadSessionStore sessionStore(lease.get());
+        db::UploadSessionDao sessionStore(lease.get());
         std::string hashBytes = hex_to_bytes(realHashHex);
         sessionStore.update_completed(uploadIdBinary, hashBytes);
     } catch (...) {}
@@ -407,7 +407,7 @@ void UploadService::mark_session_completed(const std::string& uploadIdBinary, co
 void UploadService::mark_session_failed(const std::string& uploadIdBinary, const std::string& errorMsg) {
     try {
         SociSessionLease lease(pool_);
-        store::UploadSessionStore sessionStore(lease.get());
+        db::UploadSessionDao sessionStore(lease.get());
         sessionStore.update_failed(uploadIdBinary, errorMsg);
     } catch (...) {}
 }
