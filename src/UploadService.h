@@ -1,14 +1,24 @@
 #pragma once
 
 #include "ObjectStore.h"
+#include "blake3.h"
 #include <string>
 #include <cstdint>
+#include <mutex>
+#include <unordered_map>
+#include <chrono>
 
 namespace soci {
 class connection_pool;
 }
 
 namespace filelink {
+
+struct ActiveHasher {
+    blake3_hasher hasher;
+    uint64_t current_offset = 0;
+    std::chrono::steady_clock::time_point last_active;
+};
 
 enum class UploadChunkResult {
     Success,
@@ -68,7 +78,7 @@ public:
     UploadChunkResult write_session_chunk(const std::string& uploadIdHex, uint64_t clientOffset, const std::string& chunkData, uint64_t& out_newOffset);
 
 private:
-    void finalize_session(std::string uploadIdHex);
+    void finalize_session(std::string uploadIdHex, std::string realHashHex = "");
 
     // Atomic helpers for chunk write flow
     UploadChunkResult validate_session_offset(const db::UploadSession& session, uint64_t clientOffset, uint64_t chunkSize);
@@ -84,10 +94,16 @@ private:
     // Utility helpers
     std::string get_part_file_path(const std::string& uploadIdHex) const;
 
+    bool reconstruct_hasher_from_file(const std::string& partPath, uint64_t limitOffset, blake3_hasher& out_hasher);
+    void clean_expired_hashers_under_lock();
+
 private:
     soci::connection_pool& pool_;
     std::string storageRoot_;
     ObjectStore store_;
+
+    std::unordered_map<std::string, ActiveHasher> activeHashers_;
+    std::mutex hashersMutex_;
 };
 
 } // namespace filelink

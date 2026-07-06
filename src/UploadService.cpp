@@ -220,6 +220,57 @@ UploadChunkResult UploadService::write_session_chunk(const std::string& uploadId
 
         uint64_t newOffset = clientOffset + chunkData.size();
         bool isComplete = (newOffset == session.total_size);
+        std::string realHashHex = "";
+
+        // Stream hashing / Lazy reconstruction
+        std::string partPath = get_part_file_path(uploadIdHex);
+        {
+            std::unique_lock<std::mutex> lock(hashersMutex_);
+            if (activeHashers_.size() > 128) {
+                clean_expired_hashers_under_lock();
+            }
+
+            auto it = activeHashers_.find(uploadIdHex);
+            if (it == activeHashers_.end() || it->second.current_offset != clientOffset) {
+                lock.unlock(); // Release lock during reconstruction I/O
+                blake3_hasher restoredHasher;
+                bool ok = true;
+                if (clientOffset > 0) {
+                    ok = reconstruct_hasher_from_file(partPath, clientOffset, restoredHasher);
+                } else {
+                    blake3_hasher_init(&restoredHasher);
+                }
+                
+                lock.lock(); // Re-acquire lock
+                if (ok) {
+                    ActiveHasher ah{restoredHasher, clientOffset, std::chrono::steady_clock::now()};
+                    activeHashers_[uploadIdHex] = ah;
+                    it = activeHashers_.find(uploadIdHex);
+                } else {
+                    activeHashers_.erase(uploadIdHex);
+                    it = activeHashers_.end();
+                }
+            }
+
+            if (it != activeHashers_.end()) {
+                blake3_hasher_update(&it->second.hasher, chunkData.data(), chunkData.size());
+                it->second.current_offset += chunkData.size();
+                it->second.last_active = std::chrono::steady_clock::now();
+
+                if (isComplete) {
+                    uint8_t hashOutput[BLAKE3_OUT_LEN];
+                    blake3_hasher_finalize(&it->second.hasher, hashOutput, BLAKE3_OUT_LEN);
+
+                    std::stringstream ss;
+                    ss << std::hex << std::setfill('0');
+                    for (int i = 0; i < BLAKE3_OUT_LEN; ++i) {
+                        ss << std::setw(2) << static_cast<int>(hashOutput[i]);
+                    }
+                    realHashHex = ss.str();
+                    activeHashers_.erase(it);
+                }
+            }
+        }
 
         sessionStore.update_offset(uploadIdBinary, newOffset);
         if (isComplete) {
@@ -230,26 +281,31 @@ UploadChunkResult UploadService::write_session_chunk(const std::string& uploadId
         out_newOffset = newOffset;
 
         if (isComplete) {
-            std::thread([this, uploadIdHex]() {
-                this->finalize_session(uploadIdHex);
+            std::thread([this, uploadIdHex, realHashHex]() {
+                this->finalize_session(uploadIdHex, realHashHex);
             }).detach();
         }
 
         return UploadChunkResult::Success;
     } catch (...) {
+        {
+            std::lock_guard<std::mutex> lock(hashersMutex_);
+            activeHashers_.erase(uploadIdHex);
+        }
         return UploadChunkResult::SystemError;
     }
 }
 
-void UploadService::finalize_session(std::string uploadIdHex) {
+void UploadService::finalize_session(std::string uploadIdHex, std::string realHashHex) {
     std::string uploadIdBinary = parse_upload_id_to_binary(uploadIdHex);
     std::string partPath = get_part_file_path(uploadIdHex);
 
-    // 1. Compute BLAKE3
-    std::string realHashHex;
-    if (!compute_file_hash(partPath, realHashHex)) {
-        mark_session_failed(uploadIdBinary, "Hashing failed");
-        return;
+    // 1. Compute BLAKE3 if not precomputed (Fallback)
+    if (realHashHex.empty()) {
+        if (!compute_file_hash(partPath, realHashHex)) {
+            mark_session_failed(uploadIdBinary, "Hashing failed");
+            return;
+        }
     }
 
     // 2. Compare with expected_hash (if set)
@@ -415,6 +471,40 @@ void UploadService::mark_session_failed(const std::string& uploadIdBinary, const
 // Utility helpers
 std::string UploadService::get_part_file_path(const std::string& uploadIdHex) const {
     return storageRoot_ + "/uploads/" + uploadIdHex + ".part";
+}
+
+bool UploadService::reconstruct_hasher_from_file(const std::string& partPath, uint64_t limitOffset, blake3_hasher& out_hasher) {
+    std::ifstream ifs(partPath, std::ios::binary);
+    if (!ifs) {
+        return false;
+    }
+
+    blake3_hasher_init(&out_hasher);
+    char buffer[65536];
+    uint64_t readBytes = 0;
+
+    while (readBytes < limitOffset) {
+        uint64_t toRead = std::min(static_cast<uint64_t>(sizeof(buffer)), limitOffset - readBytes);
+        ifs.read(buffer, toRead);
+        std::streamsize bytesRead = ifs.gcount();
+        if (bytesRead <= 0) {
+            break;
+        }
+        blake3_hasher_update(&out_hasher, buffer, bytesRead);
+        readBytes += bytesRead;
+    }
+    return (readBytes == limitOffset);
+}
+
+void UploadService::clean_expired_hashers_under_lock() {
+    auto now = std::chrono::steady_clock::now();
+    for (auto it = activeHashers_.begin(); it != activeHashers_.end(); ) {
+        if (now - it->second.last_active > std::chrono::hours(1)) {
+            it = activeHashers_.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 } // namespace filelink

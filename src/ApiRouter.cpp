@@ -44,11 +44,14 @@ void ApiRouter::register_routes() {
         std::string method = req.get_method();
         if (method == "HEAD") {
             this->handle_tus_head(req, res);
-        } else if (method == "PATCH") {
+        }
+        else if (method == "PATCH") {
             this->handle_tus_patch(req, res);
-        } else if (method == "GET") {
+        }
+        else if (method == "GET") {
             this->handle_tus_get_session(req, res);
-        } else {
+        }
+        else {
             res = ApiResponseView::tus_error(405, "Method Not Allowed", "Method Not Allowed");
         }
         });
@@ -109,7 +112,6 @@ void ApiRouter::handle_download(const HttpRequest& req, HttpResponse& response) 
     if (dotPos != std::string::npos) {
         hash = hashWithExt.substr(0, dotPos);
         ext = hashWithExt.substr(dotPos);
-        // 转小写处理
         for (char& c : ext) c = std::tolower(c);
     }
 
@@ -129,10 +131,6 @@ void ApiRouter::handle_download(const HttpRequest& req, HttpResponse& response) 
         response = ApiResponseView::error(500, ex.what());
     }
 }
-
-
-
-
 
 void ApiRouter::handle_static(const HttpRequest& req, HttpResponse& response) {
     try {
@@ -210,7 +208,8 @@ void ApiRouter::handle_tus_create(const HttpRequest& req, HttpResponse& response
     uint64_t totalSize = 0;
     try {
         totalSize = std::stoull(uploadLengthStr);
-    } catch (...) {
+    }
+    catch (...) {
         response = ApiResponseView::tus_error(400, "Bad Request", "Invalid Upload-Length");
         return;
     }
@@ -271,7 +270,8 @@ void ApiRouter::handle_tus_patch(const HttpRequest& req, HttpResponse& response)
     uint64_t clientOffset = 0;
     try {
         clientOffset = std::stoull(uploadOffsetStr);
-    } catch (...) {
+    }
+    catch (...) {
         response = ApiResponseView::tus_error(400, "Bad Request", "Invalid Upload-Offset");
         return;
     }
@@ -281,13 +281,17 @@ void ApiRouter::handle_tus_patch(const HttpRequest& req, HttpResponse& response)
         UploadChunkResult rc = uploadService_.write_session_chunk(uploadIdRaw, clientOffset, req.get_body(), newOffset);
         if (rc == UploadChunkResult::Success) {
             response = ApiResponseView::tus_patched(newOffset);
-        } else if (rc == UploadChunkResult::OffsetMismatch) {
+        }
+        else if (rc == UploadChunkResult::OffsetMismatch) {
             response = ApiResponseView::tus_error(409, "Conflict", "Offset Mismatch");
-        } else if (rc == UploadChunkResult::InvalidChunkSize) {
+        }
+        else if (rc == UploadChunkResult::InvalidChunkSize) {
             response = ApiResponseView::tus_error(400, "Bad Request", "Invalid Chunk Size or Range");
-        } else if (rc == UploadChunkResult::SessionNotFound) {
+        }
+        else if (rc == UploadChunkResult::SessionNotFound) {
             response = ApiResponseView::tus_error(404, "Not Found", "Upload Session Not Found");
-        } else {
+        }
+        else {
             response = ApiResponseView::tus_error(500, "Internal Server Error", "Chunk Write Failed");
         }
     }

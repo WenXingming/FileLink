@@ -297,4 +297,97 @@ TEST_F(TusDatabaseApiTest, PatchUploadsSequenceSuccessfully) {
     ::unlink(objectPath.c_str());
 }
 
+TEST_F(TusDatabaseApiTest, PatchUploadsWithServerRestartAndLazyReconstruction) {
+    HttpServer server("127.0.0.1", 9999);
+    ObjectStore objectStore("./storage_test");
+    DownloadService downloadService(std::move(objectStore));
+    StaticFileService staticFileService("./web");
+
+    std::string uuidHex;
+    // 1. Upload the first chunk with instance 1
+    {
+        UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
+        ApiRouter router(server, downloadService, staticFileService, uploadService);
+
+        HttpRequest postReq;
+        postReq.set_method("POST");
+        postReq.set_path("/uploads");
+        postReq.add_header("Upload-Length", "24");
+        postReq.add_header("Upload-Metadata", "filename dGVzdF9wYXRjaC5iaW4=");
+
+        HttpResponse postResp;
+        call_handle_tus_create(router, postReq, postResp);
+        ASSERT_EQ(postResp.get_status_code(), 201);
+
+        std::string location = postResp.get_headers().at("Location");
+        std::size_t slashPos = location.find_last_of('/');
+        uuidHex = location.substr(slashPos + 1);
+
+        HttpRequest patchReq1;
+        patchReq1.set_method("PATCH");
+        patchReq1.set_path("/uploads/" + uuidHex);
+        patchReq1.add_header("Content-Type", "application/offset+octet-stream");
+        patchReq1.add_header("Upload-Offset", "0");
+        patchReq1.set_body("Hello ");
+
+        HttpResponse patchResp1;
+        call_handle_tus_patch(router, patchReq1, patchResp1);
+        EXPECT_EQ(patchResp1.get_status_code(), 204);
+        EXPECT_EQ(patchResp1.get_headers().at("Upload-Offset"), "6");
+    } // uploadService 1 destroyed, memory cache cleared
+
+    // 2. Upload the rest of the chunks with instance 2, simulating a server restart
+    {
+        UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
+        ApiRouter router(server, downloadService, staticFileService, uploadService);
+
+        HttpRequest patchReq2;
+        patchReq2.set_method("PATCH");
+        patchReq2.set_path("/uploads/" + uuidHex);
+        patchReq2.add_header("Content-Type", "application/offset+octet-stream");
+        patchReq2.add_header("Upload-Offset", "6");
+        patchReq2.set_body("World! (18 bytes)_");
+
+        HttpResponse resp2;
+        call_handle_tus_patch(router, patchReq2, resp2);
+        EXPECT_EQ(resp2.get_status_code(), 204);
+        EXPECT_EQ(resp2.get_headers().at("Upload-Offset"), "24");
+
+        HttpRequest getReq;
+        getReq.set_method("GET");
+        getReq.set_path("/uploads/" + uuidHex);
+
+        HttpResponse getResp;
+        bool completed = false;
+        std::string contentHashHex;
+        for (int i = 0; i < 20; ++i) {
+            getResp = HttpResponse();
+            call_handle_tus_get_session(router, getReq, getResp);
+            if (getResp.get_status_code() == 200) {
+                std::string body = getResp.get_body();
+                if (body.find(R"("state":"COMPLETED")") != std::string::npos) {
+                    completed = true;
+                    std::size_t pos = body.find(R"("content_hash":")");
+                    if (pos != std::string::npos) {
+                        contentHashHex = body.substr(pos + 16, 64);
+                    }
+                    break;
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+
+        ASSERT_TRUE(completed);
+        ASSERT_EQ(contentHashHex.size(), 64);
+
+        std::string objectPath = downloadService.get_object_path(contentHashHex);
+        std::ifstream ifs(objectPath, std::ios::binary);
+        ASSERT_TRUE(ifs.is_open());
+        std::string objectContent((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+        EXPECT_EQ(objectContent, "Hello World! (18 bytes)_");
+
+        ::unlink(objectPath.c_str());
+    }
+}
+
 } // namespace filelink
