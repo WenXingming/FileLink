@@ -4,6 +4,7 @@
 #include "StaticFileService.h"
 #include "ApiRouter.h"
 #include "UploadService.h"
+#include "cleaner/SessionCleaner.h"
 #include "tudou/http/HttpServer.h"
 #include <soci/soci.h>
 #include <soci/connection-pool.h>
@@ -42,6 +43,13 @@ int main(int argc, char* argv[]) {
                               " port=" + std::to_string(config.mysql.port);
         for (std::size_t i = 0; i < poolSize; ++i) {
             mysqlPool.at(i).open(soci::mysql, connStr);
+        }
+
+        if (config.cleanupExpiredOnly) {
+            filelink::SessionCleaner cleaner(mysqlPool, config.storageRoot);
+            int count = cleaner.cleanup_expired_sessions();
+            std::cout << "Successfully cleaned " << count << " expired sessions.\n";
+            return 0;
         }
 
         // 初始化上传业务服务

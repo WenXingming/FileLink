@@ -1,8 +1,11 @@
 #include <gtest/gtest.h>
 #include "MySqlTestConfig.h"
 #include "db/UploadSession.h"
+#include "cleaner/SessionCleaner.h"
 #include <soci/soci.h>
 #include <soci/mysql/soci-mysql.h>
+#include <fstream>
+#include <sys/stat.h>
 
 #include <exception>
 #include <string>
@@ -92,3 +95,55 @@ TEST_F(UploadSessionDaoTest, CannotCreateWithOffsetGreaterThanTotalSize) {
 
     EXPECT_THROW(store.create(session), soci::soci_error);
 }
+
+TEST_F(UploadSessionDaoTest, SessionCleanerCleansExpiredSessionAndFiles) {
+    UploadSessionDao store(sql);
+
+    // 1. Create expired session
+    UploadSession session;
+    session.upload_id = "1111222233334444"; // 16 bytes
+    session.state = "UPLOADING";
+    session.file_name = "expired.bin";
+    session.total_size = 100;
+    session.committed_offset = 0;
+    session.has_expected_hash = false;
+    session.has_content_hash = false;
+    session.has_failure_reason = false;
+
+    std::time_t t = std::time(nullptr) - 10; // 10 seconds ago
+    session.expires_at = *std::localtime(&t);
+    store.create(session);
+
+    // 2. Create local part file
+    std::string testStorage = "./storage_test";
+    std::string uploadsDir = testStorage + "/uploads";
+    ::mkdir(testStorage.c_str(), 0755);
+    ::mkdir(uploadsDir.c_str(), 0755);
+    
+    // "1111222233334444" in hex is "31313131323232323333333334343434"
+    std::string partPath = uploadsDir + "/31313131323232323333333334343434.part";
+    std::ofstream ofs(partPath);
+    ofs << "expired_data";
+    ofs.close();
+
+    struct stat st;
+    ASSERT_EQ(::stat(partPath.c_str(), &st), 0);
+
+    // 3. Perform cleanup
+    soci::connection_pool pool(1);
+    pool.at(0).open(soci::mysql, filelink::test::mysql_connection_string());
+    
+    SessionCleaner cleaner(pool, testStorage);
+    int cleaned = cleaner.cleanup_expired_sessions();
+    EXPECT_EQ(cleaned, 1);
+
+    // 4. Verify physical file deleted
+    EXPECT_NE(::stat(partPath.c_str(), &st), 0);
+
+    // 5. Verify database state updated to EXPIRED
+    UploadSession found;
+    bool exists = store.find("1111222233334444", found);
+    ASSERT_TRUE(exists);
+    EXPECT_EQ(found.state, "EXPIRED");
+}
+

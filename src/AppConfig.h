@@ -15,6 +15,7 @@ struct AppConfig {
     std::string storageRoot = "./storage";
     std::string webRoot = "./web";
     std::string logRoot = "./logs";
+    bool cleanupExpiredOnly = false;
 
     db::MySqlConfig mysql;
 };

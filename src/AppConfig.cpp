@@ -23,6 +23,7 @@ AppConfig parse_app_config(const std::vector<std::string>& args) {
             });
     app.add_option("--web-root", config.webRoot, "静态资源根目录");
     app.add_option("--log-root", config.logRoot, "日志文件根目录");
+    app.add_flag("--cleanup-expired", config.cleanupExpiredOnly, "仅清理过期的会话与临时文件并退出");
 
     // MySQL 配置
     app.add_option("--mysql-host", config.mysql.host, "MySQL 主机地址");
