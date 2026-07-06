@@ -160,18 +160,9 @@ bool UploadService::create_session(uint64_t totalSize, const std::string& metada
     std::string uploadIdBinary = generate_random_uuid_binary();
     out_uploadIdHex = bytes_to_hex(uploadIdBinary);
 
-    SociSessionLease lease(pool_);
-    db::UploadSessionDao sessionStore(lease.get());
-
-    db::UploadSession session;
-    session.upload_id = uploadIdBinary;
-    session.state = "UPLOADING";
-    session.file_name = filename.empty() ? ("upload_" + out_uploadIdHex + ".bin") : filename;
-    session.total_size = totalSize;
-    session.committed_offset = 0;
-
+    bool hitDeduplication = false;
+    std::string hashBytes;
     if (expectedHash.size() == 64) {
-        std::string hashBytes;
         for (std::size_t i = 0; i < 64; i += 2) {
             char high = expectedHash[i];
             char low = expectedHash[i + 1];
@@ -179,13 +170,41 @@ bool UploadService::create_session(uint64_t totalSize, const std::string& metada
             int l = (low >= 'a') ? (low - 'a' + 10) : ((low >= 'A') ? (low - 'A' + 10) : (low - '0'));
             hashBytes.push_back(static_cast<char>((h << 4) | l));
         }
-        session.expected_hash = hashBytes;
-        session.has_expected_hash = true;
-    } else {
-        session.has_expected_hash = false;
+
+        std::string objectPath = store_.get_object_path(expectedHash);
+        struct stat st;
+        if (::stat(objectPath.c_str(), &st) == 0 && S_ISREG(st.st_mode)) {
+            hitDeduplication = true;
+        }
     }
 
-    session.has_content_hash = false;
+    SociSessionLease lease(pool_);
+    db::UploadSessionDao sessionStore(lease.get());
+
+    db::UploadSession session;
+    session.upload_id = uploadIdBinary;
+    session.file_name = filename.empty() ? ("upload_" + out_uploadIdHex + ".bin") : filename;
+    session.total_size = totalSize;
+
+    if (hitDeduplication) {
+        session.state = "COMPLETED";
+        session.committed_offset = totalSize;
+        session.expected_hash = hashBytes;
+        session.has_expected_hash = true;
+        session.content_hash = hashBytes;
+        session.has_content_hash = true;
+    } else {
+        session.state = "UPLOADING";
+        session.committed_offset = 0;
+        if (!hashBytes.empty()) {
+            session.expected_hash = hashBytes;
+            session.has_expected_hash = true;
+        } else {
+            session.has_expected_hash = false;
+        }
+        session.has_content_hash = false;
+    }
+
     session.has_failure_reason = false;
 
     std::time_t t = std::time(nullptr) + 86400; // 24 hours

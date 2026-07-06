@@ -390,4 +390,97 @@ TEST_F(TusDatabaseApiTest, PatchUploadsWithServerRestartAndLazyReconstruction) {
     }
 }
 
+namespace {
+std::string base64_encode_test(const std::string& in) {
+    std::string out;
+    int val = 0, valb = -6;
+    for (unsigned char c : in) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            out.push_back("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
+    }
+    if (valb > -6) out.push_back("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"[((val << 8) >> (valb + 8)) & 0x3F]);
+    while (out.size() % 4) out.push_back('=');
+    return out;
+}
+}
+
+TEST_F(TusDatabaseApiTest, PostDeduplicationInstantlyCompletes) {
+    HttpServer server("127.0.0.1", 9999);
+    std::string testStorage = "./storage_test";
+    ObjectStore objectStore(testStorage);
+    DownloadService downloadService(objectStore);
+    StaticFileService staticFileService("./web");
+    UploadService uploadService(*pool, testStorage, objectStore);
+    ApiRouter router(server, downloadService, staticFileService, uploadService);
+
+    // 1. Prepare object in ObjectStore
+    std::string tempFile = testStorage + "/temp_instant_upload.tmp";
+    ::mkdir(testStorage.c_str(), 0755);
+    std::ofstream ofs(tempFile, std::ios::binary);
+    std::string content = "instant_upload_test";
+    ofs << content;
+    ofs.close();
+
+    blake3_hasher hasher;
+    blake3_hasher_init(&hasher);
+    blake3_hasher_update(&hasher, content.data(), content.size());
+    uint8_t hashOutput[BLAKE3_OUT_LEN];
+    blake3_hasher_finalize(&hasher, hashOutput, BLAKE3_OUT_LEN);
+
+    std::stringstream ss;
+    ss << std::hex << std::setfill('0');
+    for (int i = 0; i < BLAKE3_OUT_LEN; ++i) {
+        ss << std::setw(2) << static_cast<int>(hashOutput[i]);
+    }
+    std::string expectedHash = ss.str();
+
+    CommitResult result = objectStore.commit(tempFile, expectedHash);
+    ASSERT_EQ(result.status, CommitStatus::Created);
+
+    // 2. Post creation with expected_hash matching existing object
+    HttpRequest postReq;
+    postReq.set_method("POST");
+    postReq.set_path("/uploads");
+    postReq.add_header("Upload-Length", std::to_string(content.size()));
+    std::string metadataHeader = "expected_hash " + base64_encode_test(expectedHash);
+    postReq.add_header("Upload-Metadata", metadataHeader);
+
+    HttpResponse postResp;
+    call_handle_tus_create(router, postReq, postResp);
+    ASSERT_EQ(postResp.get_status_code(), 201);
+
+    std::string location = postResp.get_headers().at("Location");
+    std::size_t slashPos = location.find_last_of('/');
+    std::string uuidHex = location.substr(slashPos + 1);
+
+    // 3. Head check: expect Upload-Offset == total_size (Deduplication successful)
+    HttpRequest headReq;
+    headReq.set_method("HEAD");
+    headReq.set_path("/uploads/" + uuidHex);
+
+    HttpResponse headResp;
+    call_handle_tus_head(router, headReq, headResp);
+    EXPECT_EQ(headResp.get_status_code(), 200);
+    EXPECT_EQ(headResp.get_headers().at("Upload-Offset"), std::to_string(content.size()));
+    EXPECT_EQ(headResp.get_headers().at("Upload-Length"), std::to_string(content.size()));
+
+    // 4. Get check: expect state to be COMPLETED
+    HttpRequest getReq;
+    getReq.set_method("GET");
+    getReq.set_path("/uploads/" + uuidHex);
+
+    HttpResponse getResp;
+    call_handle_tus_get_session(router, getReq, getResp);
+    EXPECT_EQ(getResp.get_status_code(), 200);
+    std::string body = getResp.get_body();
+    EXPECT_NE(body.find(R"("state":"COMPLETED")"), std::string::npos);
+
+    // Clean up published object
+    ::unlink(result.objectPath.c_str());
+}
+
 } // namespace filelink
