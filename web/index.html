@@ -4,18 +4,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FileShare</title>
+    <title>FileLink - 简单、快速、安全的文件分享与分发服务</title>
+    <meta name="description" content="FileLink 是一个基于内容寻址的高性能大文件分发与存储服务，支持秒传去重、断点续传和安全分享。">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 
 <body>
-    <!-- 切换按钮：固定在右上角 -->
+    <!-- Background Animated Blobs -->
+    <div class="blob-glow blob-1"></div>
+    <div class="blob-glow blob-2"></div>
+
+    <!-- 主题切换按钮：固定在右上角 -->
     <button class="theme-toggle" id="themeToggle" title="切换主题">
         <!-- 默认显示太阳图标 -->
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="5"></circle>
             <line x1="12" y1="1" x2="12" y2="3"></line>
             <line x1="12" y1="21" x2="12" y2="23"></line>
@@ -28,25 +33,47 @@
         </svg>
     </button>
 
-    <!-- 登录按钮：固定在右上角（不影响上传 UI） -->
+    <!-- 登录按钮：固定在右上角 -->
     <button class="auth-toggle" id="authToggle" title="登录/退出">
-        <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
             <circle cx="12" cy="7" r="4"></circle>
         </svg>
     </button>
 
     <div class="container">
-        <div class="logo">📁 FileShare</div>
-        <div class="subtitle">简单、快速、安全的文件分享服务</div>
+        <!-- Brand Logo with clean SVG -->
+        <div class="logo">
+            <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path>
+                <path d="M14 2v4a1 1 0 0 0 1 1h4"></path>
+                <path d="m9 15 3-3 3 3"></path>
+                <path d="M12 12v6"></path>
+            </svg>
+            <span>FileLink</span>
+        </div>
+        <div class="subtitle">简单、快速、安全的内容寻址文件分发平台</div>
 
+        <!-- Upload Dragzone -->
         <div class="upload-area" id="uploadArea">
-            <div class="upload-icon">☁️</div>
-            <div class="upload-text">拖放文件到此处，或点击下方按钮</div>
+            <!-- Precise marching ants dashed boundary -->
+            <svg class="upload-border-svg" width="100%" height="100%">
+                <rect x="0" y="0" width="100%" height="100%" rx="20" ry="20" fill="none" stroke-width="2" stroke-dasharray="8 6"></rect>
+            </svg>
+            
+            <div class="upload-icon" id="uploadIconContainer">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path>
+                    <path d="M12 12v9"></path>
+                    <path d="m16 16-4-4-4 4"></path>
+                </svg>
+            </div>
+            <div class="upload-text">拖放文件到此处，或点击选择</div>
             <button class="browse-button" type="button">选择文件</button>
             <input type="file" id="fileInput">
         </div>
 
+        <!-- File Upload Info & Progress -->
         <div class="file-info" id="fileInfo">
             <div class="file-details">
                 <div class="file-name" id="fileName"></div>
@@ -58,37 +85,44 @@
             <div class="progress-text" id="progressText">0%</div>
         </div>
 
+        <!-- Form Validation & Network Errors -->
         <div class="error-message" id="errorMessage"></div>
 
+        <!-- Control Action Buttons -->
         <div class="btn-group">
-            <button class="upload-action-btn" id="uploadButton" type="button">Start Upload</button>
-            <button class="pause-btn" id="pauseButton" type="button">Pause</button>
-            <button class="cancel-btn" id="cancelButton" type="button">Cancel</button>
+            <button class="upload-action-btn" id="uploadButton" type="button">开始上传</button>
+            <button class="pause-btn" id="pauseButton" type="button">暂停</button>
+            <button class="cancel-btn" id="cancelButton" type="button">取消</button>
         </div>
 
+        <!-- Upload Result & Link Share -->
         <div class="result-area" id="resultArea">
             <div class="success-header">
-                <span class="success-icon">✅</span> Upload Successful
+                <span class="success-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </span>
+                <span>文件上传成功</span>
             </div>
-            <div style="margin-bottom: 8px; color: var(--text-secondary); font-size: 0.9rem;">Share Link:</div>
+            <div style="margin-bottom: 8px; color: var(--text-secondary); font-size: 0.88rem; font-weight: 500;">分享链接:</div>
             <div class="share-link-container">
                 <a href="#" target="_blank" class="share-link" id="shareLink"></a>
-                <button class="copy-btn-small" id="copyButton" type="button">Copy</button>
+                <button class="copy-btn-small" id="copyButton" type="button">复制</button>
             </div>
         </div>
     </div>
 
-    <!-- 登录弹窗（丝滑弹出，不占用主卡片空间） -->
+    <!-- 登录模态弹窗 -->
     <div class="auth-overlay" id="authOverlay" aria-hidden="true">
         <div class="auth-modal" role="dialog" aria-modal="true" aria-label="登录">
             <div class="auth-modal-header">
-                <div>
-                    <div class="auth-modal-title">登录后才可上传</div>
-                </div>
+                <div class="auth-modal-title">需要登录后上传</div>
+                <div class="auth-modal-subtitle">请使用您的团队凭证进行身份验证</div>
             </div>
 
             <div class="auth-body">
-                <div class="login-area" style="margin: 0;">
+                <div class="login-area">
                     <div class="login-form">
                         <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
                         <input type="password" id="loginPassword" placeholder="密码" autocomplete="current-password">
@@ -96,9 +130,12 @@
                     <div class="auth-error-message" id="authErrorMessage"></div>
                     <div class="login-actions">
                         <button class="login-btn" id="loginButton" type="button">登录</button>
-                        <button class="logout-btn" id="logoutButton" type="button">退出</button>
+                        <button class="logout-btn" id="logoutButton" type="button">关闭</button>
                     </div>
-                    <div class="login-status" id="loginStatus"><span class="status-dot"></span><span>未登录</span></div>
+                    <div class="login-status" id="loginStatus">
+                        <span class="status-dot"></span>
+                        <span>未登录</span>
+                    </div>
                 </div>
             </div>
         </div>

@@ -39,8 +39,37 @@ const uploadArea = document.getElementById('uploadArea');
         const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024;
 
         // SVG 图标定义，避免字符编码问题
-        const sunIcon = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`;
-        const moonIcon = `<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
+        const sunIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`;
+        const moonIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`;
+
+        function getFileIconSvg(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const iconStyle = `width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"`;
+            
+            if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp', 'ico'].includes(ext)) {
+                return `<svg ${iconStyle}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+            }
+            if (['mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv'].includes(ext)) {
+                return `<svg ${iconStyle}><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`;
+            }
+            if (['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac'].includes(ext)) {
+                return `<svg ${iconStyle}><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+            }
+            if (['html', 'css', 'js', 'ts', 'jsx', 'tsx', 'json', 'py', 'cpp', 'c', 'h', 'go', 'rs', 'java', 'sh', 'yaml', 'toml', 'sql'].includes(ext)) {
+                return `<svg ${iconStyle}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`;
+            }
+            if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md', 'epub'].includes(ext)) {
+                return `<svg ${iconStyle}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+            }
+            if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(ext)) {
+                return `<svg ${iconStyle}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="16" y2="16"/></svg>`;
+            }
+            return `<svg ${iconStyle}><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>`;
+        }
+
+        function getDefaultUploadIconSvg() {
+            return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>`;
+        }
 
         let isDarkMode = false;
         let isThemeTransitioning = false;
@@ -76,9 +105,9 @@ const uploadArea = document.getElementById('uploadArea');
         function getThemeBackgroundGradient(theme) {
             // 仅用于遮罩层背景：用固定值保证切换过程中不受 CSS 变量变化影响
             if (theme === 'dark') {
-                return 'linear-gradient(135deg, #667eea, #764ba2)';
+                return 'linear-gradient(135deg, #080b10, #0f172a)';
             }
-            return 'linear-gradient(135deg, #e0e7ff, #f3e8ff)';
+            return 'linear-gradient(135deg, #f8fafc, #e2e8f0)';
         }
 
         function setTheme(nextIsDark, persist = true) {
@@ -215,16 +244,29 @@ const uploadArea = document.getElementById('uploadArea');
             shareLink.href = '#';
             shareLink.textContent = '';
 
+            const uploadIconContainer = document.getElementById('uploadIconContainer');
+            if (uploadIconContainer) {
+                uploadIconContainer.innerHTML = getDefaultUploadIconSvg();
+            }
+
             resetUI();
         }
 
         function showAuthError(msg) {
-            authErrorMessage.textContent = msg;
-            authErrorMessage.style.display = msg ? 'block' : 'none';
+            const errorIcon = `<span class="error-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>`;
+            authErrorMessage.innerHTML = msg ? (errorIcon + `<span>${msg}</span>`) : '';
+            authErrorMessage.style.display = msg ? 'flex' : 'none';
+            if (msg) {
+                authErrorMessage.classList.add('show');
+            } else {
+                authErrorMessage.classList.remove('show');
+            }
         }
 
         function clearAuthError() {
-            showAuthError('');
+            authErrorMessage.innerHTML = '';
+            authErrorMessage.style.display = 'none';
+            authErrorMessage.classList.remove('show');
         }
 
         function loadToken() {
@@ -339,6 +381,11 @@ const uploadArea = document.getElementById('uploadArea');
             fileSize.textContent = formatFileSize(file.size);
             fileInfo.style.display = 'block';
             uploadButton.style.display = 'block';
+
+            const uploadIconContainer = document.getElementById('uploadIconContainer');
+            if (uploadIconContainer) {
+                uploadIconContainer.innerHTML = getFileIconSvg(file.name);
+            }
         }
 
         uploadButton.addEventListener('click', () => {
@@ -735,8 +782,14 @@ const uploadArea = document.getElementById('uploadArea');
         }
 
         function showError(msg) {
-            errorMessage.textContent = msg;
-            errorMessage.style.display = msg ? 'block' : 'none';
+            const errorIcon = `<span class="error-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>`;
+            errorMessage.innerHTML = msg ? (errorIcon + `<span>${msg}</span>`) : '';
+            errorMessage.style.display = msg ? 'flex' : 'none';
+            if (msg) {
+                errorMessage.classList.add('show');
+            } else {
+                errorMessage.classList.remove('show');
+            }
             progressContainer.style.display = 'none';
             progressText.style.display = 'none';
         }
