@@ -173,7 +173,7 @@ bool UploadService::create_session(uint64_t totalSize, const std::string& metada
 
         std::string objectPath = store_.get_object_path(expectedHash);
         struct stat st;
-        if (::stat(objectPath.c_str(), &st) == 0 && S_ISREG(st.st_mode)) {
+        if (::stat(objectPath.c_str(), &st) == 0 && S_ISREG(st.st_mode) && static_cast<uint64_t>(st.st_size) == totalSize) {
             hitDeduplication = true;
         }
     }

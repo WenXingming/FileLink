@@ -562,4 +562,71 @@ TEST_F(TusDatabaseApiTest, DeleteUploadInstantlyFreesResources) {
     EXPECT_EQ(deleteResp2.get_status_code(), 404);
 }
 
+TEST_F(TusDatabaseApiTest, PostDeduplicationRejectsIncorrectSize) {
+    HttpServer server("127.0.0.1", 9999);
+    std::string testStorage = "./storage_test";
+    ObjectStore objectStore(testStorage);
+    DownloadService downloadService(objectStore);
+    StaticFileService staticFileService("./web");
+    UploadService uploadService(*pool, testStorage, objectStore);
+    ApiRouter router(server, downloadService, staticFileService, uploadService);
+
+    // 1. Prepare object in ObjectStore with content "damaged" (7 bytes)
+    std::string tempFile = testStorage + "/temp_size_mismatch.tmp";
+    ::mkdir(testStorage.c_str(), 0755);
+    std::ofstream ofs(tempFile, std::ios::binary);
+    std::string content = "damaged";
+    ofs << content;
+    ofs.close();
+
+    blake3_hasher hasher;
+    blake3_hasher_init(&hasher);
+    blake3_hasher_update(&hasher, content.data(), content.size());
+    uint8_t hashOutput[BLAKE3_OUT_LEN];
+    blake3_hasher_finalize(&hasher, hashOutput, BLAKE3_OUT_LEN);
+
+    std::stringstream ss;
+    ss << std::hex << std::setfill('0');
+    for (int i = 0; i < BLAKE3_OUT_LEN; ++i) {
+        ss << std::setw(2) << static_cast<int>(hashOutput[i]);
+    }
+    std::string expectedHash = ss.str();
+
+    CommitResult result = objectStore.commit(tempFile, expectedHash);
+    ASSERT_EQ(result.status, CommitStatus::Created);
+
+    // 2. Post creation with expected_hash matching existing object,
+    //    BUT specify a different Upload-Length (100 bytes, mismatched from 7 bytes).
+    HttpRequest postReq;
+    postReq.set_method("POST");
+    postReq.set_path("/uploads");
+    postReq.add_header("Upload-Length", "100"); // 100 != 7
+    std::string metadataHeader = "expected_hash " + base64_encode_test(expectedHash);
+    postReq.add_header("Upload-Metadata", metadataHeader);
+
+    HttpResponse postResp;
+    call_handle_tus_create(router, postReq, postResp);
+    ASSERT_EQ(postResp.get_status_code(), 201); // Created successfully, but should NOT hit deduplication
+
+    std::string location = postResp.get_headers().at("Location");
+    std::size_t slashPos = location.find_last_of('/');
+    std::string uuidHex = location.substr(slashPos + 1);
+
+    // 3. Head check: expect Upload-Offset == 0, state == UPLOADING
+    HttpRequest headReq;
+    headReq.set_method("HEAD");
+    headReq.set_path("/uploads/" + uuidHex);
+
+    HttpResponse headResp;
+    call_handle_tus_head(router, headReq, headResp);
+    EXPECT_EQ(headResp.get_status_code(), 200);
+    EXPECT_EQ(headResp.get_headers().at("Upload-Offset"), "0"); // Not completed!
+    EXPECT_EQ(headResp.get_headers().at("Upload-Length"), "100");
+
+    // Clean up
+    std::string partPath = testStorage + "/uploads/" + uuidHex + ".part";
+    ::unlink(partPath.c_str());
+    ::unlink(result.objectPath.c_str());
+}
+
 } // namespace filelink
