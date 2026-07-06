@@ -33,6 +33,7 @@ private:
     void handle_tus_patch(const HttpRequest& req, HttpResponse& response);          // 上传数据分片。PATCH /uploads/<uploadIdHex> 
     void handle_tus_head(const HttpRequest& req, HttpResponse& response);           // 查询上传进度/断点续传。HEAD /uploads/<uploadIdHex> 
     void handle_tus_get_session(const HttpRequest& req, HttpResponse& response);    // 获取会话状态，自定义的扩展接口，非 Tus 核心规范。GET /uploads/<uploadIdHex> 
+    void handle_tus_terminate(const HttpRequest& req, HttpResponse& response);      // 主动取消会话。DELETE /uploads/<uploadIdHex> 
 
 private:
     HttpServer& server_;                    // 底层 HTTP 服务器实例

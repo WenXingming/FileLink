@@ -77,6 +77,13 @@ public:
      */
     UploadChunkResult write_session_chunk(const std::string& uploadIdHex, uint64_t clientOffset, const std::string& chunkData, uint64_t& out_newOffset);
 
+    /**
+     * @brief 主动终止上传会话，擦除临时文件和缓存，置为 ABORTED 状态
+     * @param uploadIdHex 16进制的会话ID
+     * @return 是否成功终止
+     */
+    bool terminate_session(const std::string& uploadIdHex);
+
 private:
     void finalize_session(std::string uploadIdHex, std::string realHashHex = "");
 

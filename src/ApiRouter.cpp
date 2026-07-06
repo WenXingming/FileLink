@@ -51,6 +51,9 @@ void ApiRouter::register_routes() {
         else if (method == "GET") {
             this->handle_tus_get_session(req, res);
         }
+        else if (method == "DELETE") {
+            this->handle_tus_terminate(req, res);
+        }
         else {
             res = ApiResponseView::tus_error(405, "Method Not Allowed", "Method Not Allowed");
         }
@@ -322,6 +325,35 @@ void ApiRouter::handle_tus_get_session(const HttpRequest& req, HttpResponse& res
         }
 
         response = ApiResponseView::tus_session_status(session);
+    }
+    catch (const std::exception& ex) {
+        response = ApiResponseView::tus_error(500, "Internal Server Error", ex.what());
+    }
+}
+
+void ApiRouter::handle_tus_terminate(const HttpRequest& req, HttpResponse& response) {
+    response.set_header("Tus-Resumable", "1.0.0");
+
+    if (req.get_method() != "DELETE") {
+        response = ApiResponseView::tus_error(405, "Method Not Allowed", "Method Not Allowed");
+        return;
+    }
+
+    const std::string prefix = "/uploads/";
+    const std::string path = req.get_path();
+    if (path.size() <= prefix.size()) {
+        response = ApiResponseView::tus_error(400, "Bad Request", "Missing Upload ID");
+        return;
+    }
+    std::string uploadIdRaw = path.substr(prefix.size());
+
+    try {
+        if (!uploadService_.terminate_session(uploadIdRaw)) {
+            response = ApiResponseView::tus_error(404, "Not Found", "Upload Session Not Found or Cannot Be Terminated");
+            return;
+        }
+
+        response.set_status(204, "No Content");
     }
     catch (const std::exception& ex) {
         response = ApiResponseView::tus_error(500, "Internal Server Error", ex.what());

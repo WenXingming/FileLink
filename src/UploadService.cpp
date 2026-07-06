@@ -315,6 +315,47 @@ UploadChunkResult UploadService::write_session_chunk(const std::string& uploadId
     }
 }
 
+bool UploadService::terminate_session(const std::string& uploadIdHex) {
+    std::string uploadIdBinary = parse_upload_id_to_binary(uploadIdHex);
+    
+    try {
+        SociSessionLease lease(pool_);
+        soci::session& sql = lease.get();
+        
+        db::UploadSessionDao sessionStore(sql);
+        db::UploadSession session;
+        if (!sessionStore.find(uploadIdBinary, session)) {
+            return false;
+        }
+
+        if (session.state != "UPLOADING" && session.state != "FINALIZING") {
+            return false;
+        }
+
+        // 1. Erase from active hashers map
+        {
+            std::lock_guard<std::mutex> lock(hashersMutex_);
+            activeHashers_.erase(uploadIdHex);
+        }
+
+        // 2. Physically remove temporary file
+        std::string partPath = get_part_file_path(uploadIdHex);
+        struct stat st;
+        if (::stat(partPath.c_str(), &st) == 0) {
+            ::unlink(partPath.c_str());
+        }
+
+        // 3. Update state in db to ABORTED
+        soci::transaction tr(sql);
+        sessionStore.update_state(uploadIdBinary, "ABORTED");
+        tr.commit();
+
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 void UploadService::finalize_session(std::string uploadIdHex, std::string realHashHex) {
     std::string uploadIdBinary = parse_upload_id_to_binary(uploadIdHex);
     std::string partPath = get_part_file_path(uploadIdHex);

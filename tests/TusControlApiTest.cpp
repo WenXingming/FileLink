@@ -39,6 +39,9 @@ protected:
     void call_handle_tus_get_session(ApiRouter& router, const HttpRequest& req, HttpResponse& resp) {
         router.handle_tus_get_session(req, resp);
     }
+    void call_handle_tus_terminate(ApiRouter& router, const HttpRequest& req, HttpResponse& resp) {
+        router.handle_tus_terminate(req, resp);
+    }
 };
 
 class TusDatabaseApiTest : public TusControlApiTest {
@@ -481,6 +484,82 @@ TEST_F(TusDatabaseApiTest, PostDeduplicationInstantlyCompletes) {
 
     // Clean up published object
     ::unlink(result.objectPath.c_str());
+}
+
+TEST_F(TusDatabaseApiTest, DeleteUploadInstantlyFreesResources) {
+    HttpServer server("127.0.0.1", 9999);
+    std::string testStorage = "./storage_test";
+    ObjectStore objectStore(testStorage);
+    DownloadService downloadService(objectStore);
+    StaticFileService staticFileService("./web");
+    UploadService uploadService(*pool, testStorage, objectStore);
+    ApiRouter router(server, downloadService, staticFileService, uploadService);
+
+    // 1. Create upload session
+    HttpRequest postReq;
+    postReq.set_method("POST");
+    postReq.set_path("/uploads");
+    postReq.add_header("Upload-Length", "10");
+    postReq.add_header("Upload-Metadata", "filename Y2FuY2VsX3Rlc3QuYmlu");
+
+    HttpResponse postResp;
+    call_handle_tus_create(router, postReq, postResp);
+    ASSERT_EQ(postResp.get_status_code(), 201);
+
+    std::string location = postResp.get_headers().at("Location");
+    std::size_t slashPos = location.find_last_of('/');
+    std::string uuidHex = location.substr(slashPos + 1);
+
+    // 2. Patch some data to create the physical .part file
+    HttpRequest patchReq;
+    patchReq.set_method("PATCH");
+    patchReq.set_path("/uploads/" + uuidHex);
+    patchReq.add_header("Content-Type", "application/offset+octet-stream");
+    patchReq.add_header("Upload-Offset", "0");
+    patchReq.set_body("Hello");
+
+    HttpResponse patchResp;
+    call_handle_tus_patch(router, patchReq, patchResp);
+    EXPECT_EQ(patchResp.get_status_code(), 204);
+
+    // Verify .part file exists
+    std::string partPath = testStorage + "/uploads/" + uuidHex + ".part";
+    struct stat st;
+    ASSERT_EQ(::stat(partPath.c_str(), &st), 0);
+
+    // 3. Send DELETE request to cancel upload
+    HttpRequest deleteReq;
+    deleteReq.set_method("DELETE");
+    deleteReq.set_path("/uploads/" + uuidHex);
+
+    HttpResponse deleteResp;
+    call_handle_tus_terminate(router, deleteReq, deleteResp);
+    EXPECT_EQ(deleteResp.get_status_code(), 204);
+
+    // 4. Verify physical file deleted
+    EXPECT_NE(::stat(partPath.c_str(), &st), 0);
+
+    // 5. Verify database state updated to ABORTED
+    std::string uuidBinary;
+    for (std::size_t i = 0; i < 32; i += 2) {
+        char high = uuidHex[i];
+        char low = uuidHex[i + 1];
+        int h = (high >= 'a') ? (high - 'a' + 10) : ((high >= 'A') ? (high - 'A' + 10) : (high - '0'));
+        int l = (low >= 'a') ? (low - 'a' + 10) : ((low >= 'A') ? (low - 'A' + 10) : (low - '0'));
+        uuidBinary.push_back(static_cast<char>((h << 4) | l));
+    }
+
+    soci::session sql(*pool);
+    UploadSessionDao store(sql);
+    UploadSession session;
+    bool found = store.find(uuidBinary, session);
+    ASSERT_TRUE(found);
+    EXPECT_EQ(session.state, "ABORTED");
+
+    // 6. Retry DELETE: expect 404 since it's already aborted
+    HttpResponse deleteResp2;
+    call_handle_tus_terminate(router, deleteReq, deleteResp2);
+    EXPECT_EQ(deleteResp2.get_status_code(), 404);
 }
 
 } // namespace filelink

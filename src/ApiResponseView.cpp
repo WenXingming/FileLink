@@ -70,7 +70,7 @@ HttpResponse ApiResponseView::tus_options() {
     response.set_header("Tus-Resumable", "1.0.0");
     response.set_header("Tus-Version", "1.0.0");
     response.set_header("Tus-Max-Size", "10737418240"); // 10GB
-    response.set_header("Tus-Extension", "creation,expiration");
+    response.set_header("Tus-Extension", "creation,expiration,termination");
     return response;
 }
 
