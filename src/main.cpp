@@ -5,6 +5,7 @@
 #include "ApiRouter.h"
 #include "UploadService.h"
 #include "cleaner/SessionCleaner.h"
+#include "cleaner/DedupRunner.h"
 #include "tudou/http/HttpServer.h"
 #include <soci/soci.h>
 #include <soci/connection-pool.h>
@@ -49,6 +50,13 @@ int main(int argc, char* argv[]) {
             filelink::SessionCleaner cleaner(mysqlPool, config.storageRoot);
             int count = cleaner.cleanup_expired_sessions();
             std::cout << "Successfully cleaned " << count << " expired sessions.\n";
+            return 0;
+        }
+
+        if (config.runDedupOnly) {
+            filelink::DedupRunner runner(config.storageRoot);
+            int count = runner.run_dedup();
+            std::cout << "Successfully merged " << count << " duplicate files.\n";
             return 0;
         }
 

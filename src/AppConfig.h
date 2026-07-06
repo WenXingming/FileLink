@@ -16,6 +16,7 @@ struct AppConfig {
     std::string webRoot = "./web";
     std::string logRoot = "./logs";
     bool cleanupExpiredOnly = false;
+    bool runDedupOnly = false;
 
     db::MySqlConfig mysql;
 };
