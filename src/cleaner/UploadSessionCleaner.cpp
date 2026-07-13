@@ -1,15 +1,17 @@
-#include "SessionCleaner.h"
+#include "UploadSessionCleaner.h"
+
 #include "db/SociSessionLease.h"
-#include <soci/soci.h>
+
+#include <cerrno>
+#include <iomanip>
+#include <iostream>
 #include <soci/connection-pool.h>
 #include <soci/rowset.h>
+#include <soci/soci.h>
 #include <sstream>
-#include <iomanip>
-#include <vector>
-#include <iostream>
-#include <unistd.h>
 #include <sys/stat.h>
-#include <cerrno>
+#include <unistd.h>
+#include <vector>
 
 namespace filelink {
 
@@ -26,18 +28,18 @@ std::string bytes_to_hex(const std::string& bytes) {
 
 } // namespace
 
-SessionCleaner::SessionCleaner(soci::connection_pool& pool, std::string storageRoot)
+UploadSessionCleaner::UploadSessionCleaner(soci::connection_pool& pool, std::string storageRoot)
     : pool_(pool), storageRoot_(std::move(storageRoot)) {
 }
 
-int SessionCleaner::cleanup_expired_sessions() {
+int UploadSessionCleaner::cleanup_expired_sessions() {
     int successCount = 0;
     try {
         db::SociSessionLease lease(pool_);
         soci::session& sql = lease.get();
 
         // 1. 查询所有已过期的处于 UPLOADING 状态的会话
-        soci::rowset<std::string> rows = (sql.prepare << 
+        soci::rowset<std::string> rows = (sql.prepare <<
             "SELECT upload_id FROM upload_sessions WHERE state = 'UPLOADING' AND expires_at < NOW()");
 
         // 2. 逐个清理物理文件与数据库状态
@@ -49,7 +51,7 @@ int SessionCleaner::cleanup_expired_sessions() {
             struct stat st;
             if (::stat(partPath.c_str(), &st) == 0) {
                 if (::unlink(partPath.c_str()) != 0 && errno != ENOENT) {
-                    std::cerr << "[Cleaner] Warning: Failed to unlink expired file: " 
+                    std::cerr << "[Cleaner] Warning: Failed to unlink expired file: "
                               << partPath << ", error: " << ::strerror(errno) << "\n";
                 }
             }
@@ -62,7 +64,7 @@ int SessionCleaner::cleanup_expired_sessions() {
                 tr.commit();
                 successCount++;
             } catch (const std::exception& e) {
-                std::cerr << "[Cleaner] Error: Failed to update database state for session: " 
+                std::cerr << "[Cleaner] Error: Failed to update database state for session: "
                           << idHex << ", error: " << e.what() << "\n";
             }
         }

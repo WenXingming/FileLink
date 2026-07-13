@@ -1,5 +1,7 @@
 #include "Object.h"
 
+#include <soci/rowset.h>
+
 namespace filelink {
 namespace db {
 
@@ -34,6 +36,31 @@ bool ObjectDao::claim_pending_delete(const std::string& content_hash) {
 bool ObjectDao::return_to_pending_delete(const std::string& content_hash) {
     soci::statement statement = (sql_.prepare
         << "UPDATE objects SET state = 'PENDING_DELETE' "
+           "WHERE content_hash = :hash AND ref_count = 0 AND state = 'RECLAIMING'",
+        soci::use(content_hash));
+    statement.execute(false);
+    return statement.get_affected_rows() == 1;
+}
+
+void ObjectDao::find_reclaimable(std::vector<Object>& out_objects) {
+    soci::rowset<soci::row> rows = (sql_.prepare
+        << "SELECT content_hash, state FROM objects "
+           "WHERE ref_count = 0 AND state IN ('PENDING_DELETE', 'RECLAIMING')");
+
+    out_objects.clear();
+    for (const soci::row& row : rows) {
+        out_objects.push_back(Object{
+            row.get<std::string>(0),
+            0,
+            0,
+            row.get<std::string>(1)
+        });
+    }
+}
+
+bool ObjectDao::remove_reclaiming(const std::string& content_hash) {
+    soci::statement statement = (sql_.prepare
+        << "DELETE FROM objects "
            "WHERE content_hash = :hash AND ref_count = 0 AND state = 'RECLAIMING'",
         soci::use(content_hash));
     statement.execute(false);

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace filelink {
 namespace db {
@@ -29,6 +30,8 @@ public:
     bool remove_reference(const std::string& content_hash);
     bool claim_pending_delete(const std::string& content_hash);
     bool return_to_pending_delete(const std::string& content_hash);
+    void find_reclaimable(std::vector<Object>& out_objects);
+    bool remove_reclaiming(const std::string& content_hash);
     bool find(const std::string& content_hash, Object& out_object);
 
 private:

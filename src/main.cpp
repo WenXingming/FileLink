@@ -9,7 +9,8 @@
 #include "site/SiteRouter.h"
 #include "uploads/UploadApiRouter.h"
 #include "uploads/UploadService.h"
-#include "cleaner/SessionCleaner.h"
+#include "cleaner/UploadSessionCleaner.h"
+#include "cleaner/ObjectReclaimer.h"
 #include "cleaner/DedupRunner.h"
 #include "tudou/http/HttpServer.h"
 #include <soci/soci.h>
@@ -51,9 +52,16 @@ int main(int argc, char* argv[]) {
         }
 
         if (config.cleanupExpiredOnly) {
-            filelink::SessionCleaner cleaner(mysqlPool, config.storageRoot);
+            filelink::UploadSessionCleaner cleaner(mysqlPool, config.storageRoot);
             int count = cleaner.cleanup_expired_sessions();
             std::cout << "Successfully cleaned " << count << " expired sessions.\n";
+            return 0;
+        }
+
+        if (config.reclaimPendingObjectsOnly) {
+            filelink::ObjectReclaimer reclaimer(mysqlPool, filelink::ObjectStore(config.storageRoot));
+            const int count = reclaimer.reclaim_pending_objects();
+            std::cout << "Successfully reclaimed " << count << " unreferenced objects.\n";
             return 0;
         }
 

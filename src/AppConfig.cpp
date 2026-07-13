@@ -24,6 +24,8 @@ AppConfig parse_app_config(const std::vector<std::string>& args) {
     app.add_option("--web-root", config.webRoot, "静态资源根目录");
     app.add_option("--log-root", config.logRoot, "日志文件根目录");
     app.add_flag("--cleanup-expired", config.cleanupExpiredOnly, "仅清理过期的会话与临时文件并退出");
+    app.add_flag("--reclaim-pending-objects", config.reclaimPendingObjectsOnly,
+        "离线回收零引用对象并退出");
     app.add_flag("--dedup", config.runDedupOnly, "仅对存储目录进行重复文件扫描与硬链接合并并退出");
 
     // MySQL 配置

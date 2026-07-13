@@ -4,7 +4,7 @@
 #include "db/File.h"
 #include "db/Object.h"
 #include "db/User.h"
-#include "cleaner/SessionCleaner.h"
+#include "cleaner/UploadSessionCleaner.h"
 #include <soci/soci.h>
 #include <soci/mysql/soci-mysql.h>
 #include <fstream>
@@ -147,7 +147,7 @@ TEST_F(UploadSessionDaoTest, CannotCreateWithOffsetGreaterThanTotalSize) {
     EXPECT_THROW(store.create(session), soci::soci_error);
 }
 
-TEST_F(UploadSessionDaoTest, SessionCleanerCleansExpiredSessionAndFiles) {
+TEST_F(UploadSessionDaoTest, UploadSessionCleanerCleansExpiredSessionAndFiles) {
     UploadSessionDao store(sql);
 
     // 1. Create expired session
@@ -185,7 +185,7 @@ TEST_F(UploadSessionDaoTest, SessionCleanerCleansExpiredSessionAndFiles) {
     soci::connection_pool pool(1);
     pool.at(0).open(soci::mysql, filelink::test::mysql_connection_string());
     
-    SessionCleaner cleaner(pool, testStorage);
+    UploadSessionCleaner cleaner(pool, testStorage);
     int cleaned = cleaner.cleanup_expired_sessions();
     EXPECT_EQ(cleaned, 1);
 

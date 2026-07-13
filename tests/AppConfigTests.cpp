@@ -56,6 +56,14 @@ TEST_F(AppConfigTest, ReadsCommandLineOptions) {
     EXPECT_EQ(config.storageRoot, "/srv/filelink");
 }
 
+TEST_F(AppConfigTest, EnablesOfflineObjectReclamation) {
+    const filelink::AppConfig config = filelink::parse_app_config({
+        "--reclaim-pending-objects"
+    });
+
+    EXPECT_TRUE(config.reclaimPendingObjectsOnly);
+}
+
 TEST_F(AppConfigTest, ReadsTomlConfig) {
     write_config(
         "address = \"127.0.0.1\"\n"

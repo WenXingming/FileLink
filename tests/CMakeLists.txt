@@ -29,6 +29,7 @@ if(FILELINK_BUILD_INTEGRATION_TESTS)
         AuthServiceTest.cpp
         AuthApiTest.cpp
         DedupRunnerTest.cpp
+        ObjectReclaimerTest.cpp
     )
     target_link_libraries(filelink_integration_tests PRIVATE
         filelink_lib
