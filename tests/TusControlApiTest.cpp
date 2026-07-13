@@ -1,6 +1,5 @@
 #include "ApiRouter.h"
 #include "MySqlTestConfig.h"
-#include "DownloadService.h"
 #include "StaticFileService.h"
 #include "UploadService.h"
 #include "auth/AuthService.h"
@@ -150,8 +149,6 @@ protected:
 
 TEST_F(TusControlApiTest, OptionsReturnsCapabilities) {
     HttpServer server("127.0.0.1", 9999);
-    ObjectStore objectStore("./storage_test");
-    DownloadService downloadService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     soci::connection_pool dummyPool(1);
@@ -159,7 +156,7 @@ TEST_F(TusControlApiTest, OptionsReturnsCapabilities) {
     AuthService authService(dummyPool);
     RequestAuthenticator requestAuthenticator(authService);
 
-    ApiRouter router(server, downloadService, staticFileService, uploadService, requestAuthenticator);
+    ApiRouter router(server, staticFileService, uploadService, requestAuthenticator);
 
     HttpRequest req;
     req.set_method("OPTIONS");
@@ -177,12 +174,10 @@ TEST_F(TusControlApiTest, OptionsReturnsCapabilities) {
 
 TEST_F(TusDatabaseApiTest, HeadReturnsOffsetForExistingSession) {
     HttpServer server("127.0.0.1", 9999);
-    ObjectStore objectStore("./storage_test");
-    DownloadService downloadService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, downloadService, staticFileService, uploadService, *requestAuthenticator);
+    ApiRouter router(server, staticFileService, uploadService, *requestAuthenticator);
 
     std::string uploadIdBinary = "\x12\x34\x56\x78\x90\x12\x34\x56\x78\x90\x12\x34\x56\x78\x90\x12";
     std::string uploadIdHex = "12345678901234567890123456789012";
@@ -218,12 +213,10 @@ TEST_F(TusDatabaseApiTest, HeadReturnsOffsetForExistingSession) {
 
 TEST_F(TusDatabaseApiTest, HeadReturnsNotFoundForNonExistentSession) {
     HttpServer server("127.0.0.1", 9999);
-    ObjectStore objectStore("./storage_test");
-    DownloadService downloadService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, downloadService, staticFileService, uploadService, *requestAuthenticator);
+    ApiRouter router(server, staticFileService, uploadService, *requestAuthenticator);
 
     HttpRequest req;
     req.set_method("HEAD");
@@ -237,12 +230,10 @@ TEST_F(TusDatabaseApiTest, HeadReturnsNotFoundForNonExistentSession) {
 
 TEST_F(TusDatabaseApiTest, PostCreatesSessionAndReturns201) {
     HttpServer server("127.0.0.1", 9999);
-    ObjectStore objectStore("./storage_test");
-    DownloadService downloadService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, downloadService, staticFileService, uploadService, *requestAuthenticator);
+    ApiRouter router(server, staticFileService, uploadService, *requestAuthenticator);
 
     HttpRequest req;
     req.set_method("POST");
@@ -296,11 +287,9 @@ TEST_F(TusDatabaseApiTest, PostCreatesSessionAndReturns201) {
 
 TEST_F(TusDatabaseApiTest, PostRejectsUnauthenticatedUpload) {
     HttpServer server("127.0.0.1", 9999);
-    ObjectStore objectStore("./storage_test");
-    DownloadService downloadService(std::move(objectStore));
     StaticFileService staticFileService("./web");
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, downloadService, staticFileService, uploadService, *requestAuthenticator);
+    ApiRouter router(server, staticFileService, uploadService, *requestAuthenticator);
 
     HttpRequest request;
     request.set_method("POST");
@@ -315,11 +304,9 @@ TEST_F(TusDatabaseApiTest, PostRejectsUnauthenticatedUpload) {
 
 TEST_F(TusDatabaseApiTest, HidesAnotherUsersUploadSession) {
     HttpServer server("127.0.0.1", 9999);
-    ObjectStore objectStore("./storage_test");
-    DownloadService downloadService(std::move(objectStore));
     StaticFileService staticFileService("./web");
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, downloadService, staticFileService, uploadService, *requestAuthenticator);
+    ApiRouter router(server, staticFileService, uploadService, *requestAuthenticator);
 
     HttpRequest create_request;
     create_request.set_method("POST");
@@ -370,12 +357,10 @@ TEST_F(TusDatabaseApiTest, HidesAnotherUsersUploadSession) {
 
 TEST_F(TusDatabaseApiTest, PatchUploadsSequenceSuccessfully) {
     HttpServer server("127.0.0.1", 9999);
-    ObjectStore objectStore("./storage_test");
-    DownloadService downloadService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, downloadService, staticFileService, uploadService, *requestAuthenticator);
+    ApiRouter router(server, staticFileService, uploadService, *requestAuthenticator);
 
     HttpRequest postReq;
     postReq.set_method("POST");
@@ -449,7 +434,7 @@ TEST_F(TusDatabaseApiTest, PatchUploadsSequenceSuccessfully) {
     ASSERT_EQ(contentHashHex.size(), 64);
     ASSERT_EQ(fileIdHex.size(), 32);
 
-    std::string objectPath = downloadService.get_object_path(contentHashHex);
+    std::string objectPath = ObjectStore("./storage_test").get_object_path(contentHashHex);
     std::ifstream ifs(objectPath, std::ios::binary);
     ASSERT_TRUE(ifs.is_open());
     std::string objectContent((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
@@ -472,15 +457,13 @@ TEST_F(TusDatabaseApiTest, PatchUploadsSequenceSuccessfully) {
 
 TEST_F(TusDatabaseApiTest, PatchUploadsWithServerRestartAndLazyReconstruction) {
     HttpServer server("127.0.0.1", 9999);
-    ObjectStore objectStore("./storage_test");
-    DownloadService downloadService(std::move(objectStore));
     StaticFileService staticFileService("./web");
 
     std::string uuidHex;
     // 1. Upload the first chunk with instance 1
     {
         UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-        ApiRouter router(server, downloadService, staticFileService, uploadService, *requestAuthenticator);
+        ApiRouter router(server, staticFileService, uploadService, *requestAuthenticator);
 
         HttpRequest postReq;
         postReq.set_method("POST");
@@ -513,7 +496,7 @@ TEST_F(TusDatabaseApiTest, PatchUploadsWithServerRestartAndLazyReconstruction) {
     // 2. Upload the rest of the chunks with instance 2, simulating a server restart
     {
         UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-        ApiRouter router(server, downloadService, staticFileService, uploadService, *requestAuthenticator);
+        ApiRouter router(server, staticFileService, uploadService, *requestAuthenticator);
 
         HttpRequest patchReq2;
         patchReq2.set_method("PATCH");
@@ -554,7 +537,7 @@ TEST_F(TusDatabaseApiTest, PatchUploadsWithServerRestartAndLazyReconstruction) {
         ASSERT_TRUE(completed);
         ASSERT_EQ(contentHashHex.size(), 64);
 
-        std::string objectPath = downloadService.get_object_path(contentHashHex);
+        std::string objectPath = ObjectStore("./storage_test").get_object_path(contentHashHex);
         std::ifstream ifs(objectPath, std::ios::binary);
         ASSERT_TRUE(ifs.is_open());
         std::string objectContent((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
@@ -599,10 +582,9 @@ TEST_F(TusDatabaseApiTest, PostDeduplicationInstantlyCompletes) {
     HttpServer server("127.0.0.1", 9999);
     std::string testStorage = "./storage_test";
     ObjectStore objectStore(testStorage);
-    DownloadService downloadService(objectStore);
     StaticFileService staticFileService("./web");
     UploadService uploadService(*pool, testStorage, objectStore);
-    ApiRouter router(server, downloadService, staticFileService, uploadService, *requestAuthenticator);
+    ApiRouter router(server, staticFileService, uploadService, *requestAuthenticator);
 
     // 1. Prepare object in ObjectStore
     std::string tempFile = testStorage + "/temp_instant_upload.tmp";
@@ -692,10 +674,9 @@ TEST_F(TusDatabaseApiTest, DeleteUploadInstantlyFreesResources) {
     HttpServer server("127.0.0.1", 9999);
     std::string testStorage = "./storage_test";
     ObjectStore objectStore(testStorage);
-    DownloadService downloadService(objectStore);
     StaticFileService staticFileService("./web");
     UploadService uploadService(*pool, testStorage, objectStore);
-    ApiRouter router(server, downloadService, staticFileService, uploadService, *requestAuthenticator);
+    ApiRouter router(server, staticFileService, uploadService, *requestAuthenticator);
 
     // 1. Create upload session
     HttpRequest postReq;
@@ -770,10 +751,9 @@ TEST_F(TusDatabaseApiTest, DeleteUploadInstantlyFreesResources) {
 TEST_F(TusDatabaseApiTest, DeleteRejectsFinalizingUpload) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
-    DownloadService downloadService(objectStore);
     StaticFileService staticFileService("./web");
     UploadService uploadService(*pool, "./storage_test", objectStore);
-    ApiRouter router(server, downloadService, staticFileService, uploadService, *requestAuthenticator);
+    ApiRouter router(server, staticFileService, uploadService, *requestAuthenticator);
 
     HttpRequest post_request;
     post_request.set_method("POST");
@@ -806,10 +786,9 @@ TEST_F(TusDatabaseApiTest, PostDeduplicationRejectsIncorrectSize) {
     HttpServer server("127.0.0.1", 9999);
     std::string testStorage = "./storage_test";
     ObjectStore objectStore(testStorage);
-    DownloadService downloadService(objectStore);
     StaticFileService staticFileService("./web");
     UploadService uploadService(*pool, testStorage, objectStore);
-    ApiRouter router(server, downloadService, staticFileService, uploadService, *requestAuthenticator);
+    ApiRouter router(server, staticFileService, uploadService, *requestAuthenticator);
 
     // 1. Prepare object in ObjectStore with content "damaged" (7 bytes)
     std::string tempFile = testStorage + "/temp_size_mismatch.tmp";

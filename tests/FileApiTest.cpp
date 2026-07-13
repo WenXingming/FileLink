@@ -1,4 +1,5 @@
 #include "MySqlTestConfig.h"
+#include "ObjectStore.h"
 #include "auth/AuthService.h"
 #include "auth/RequestAuthenticator.h"
 #include "db/File.h"
@@ -13,6 +14,10 @@
 
 #include <nlohmann/json.hpp>
 #include <soci/mysql/soci-mysql.h>
+
+#include <fstream>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace filelink {
 
@@ -49,6 +54,18 @@ protected:
         return response;
     }
 
+    HttpResponse download_file(FileApiRouter& router, const std::string& file_id,
+        const std::string& token) {
+        HttpRequest request;
+        request.set_method("GET");
+        request.set_path("/files/" + file_id + "/download");
+        request.add_header("Cookie", "filelink_session=" + token);
+
+        HttpResponse response;
+        router.handle_download(request, response);
+        return response;
+    }
+
     soci::connection_pool pool_{1};
 };
 
@@ -69,7 +86,7 @@ TEST_F(FileApiTest, ListsOnlyCurrentUsersFiles) {
 
     HttpServer server("127.0.0.1", 9999);
     RequestAuthenticator request_authenticator(auth_service);
-    FileService file_service(pool_);
+    FileService file_service(pool_, ObjectStore("./storage_test"));
     FileApiRouter router(server, file_service, request_authenticator);
 
     const HttpResponse response = list_files(router, alice.session_token);
@@ -83,13 +100,56 @@ TEST_F(FileApiTest, ListsOnlyCurrentUsersFiles) {
 TEST_F(FileApiTest, RejectsUnauthenticatedRequests) {
     AuthService auth_service(pool_);
     RequestAuthenticator request_authenticator(auth_service);
-    FileService file_service(pool_);
+    FileService file_service(pool_, ObjectStore("./storage_test"));
     HttpServer server("127.0.0.1", 9999);
     FileApiRouter router(server, file_service, request_authenticator);
 
     const HttpResponse response = list_files(router, "");
     EXPECT_EQ(response.get_status_code(), 401);
     EXPECT_EQ(response.get_body(), R"({"message":"Unauthorized"})");
+}
+
+TEST_F(FileApiTest, DownloadsOnlyOwnersFileWithFileBody) {
+    AuthService auth_service(pool_);
+    AuthenticatedSession alice;
+    AuthenticatedSession bob;
+    ASSERT_EQ(auth_service.register_user("alice", "correct-password", alice), RegisterResult::Success);
+    ASSERT_EQ(auth_service.register_user("bob", "correct-password", bob), RegisterResult::Success);
+
+    const std::string content = "private file content";
+    const std::string content_hash(32, '\0');
+    const std::string file_id = "download-file000";
+    ObjectStore store("./storage_test");
+    ::mkdir("./storage_test", 0755);
+    const std::string temporary_path = "./storage_test/file_api_download.tmp";
+    {
+        std::ofstream output(temporary_path, std::ios::binary);
+        output << content;
+    }
+    const CommitResult commit = store.commit(temporary_path, std::string(64, '0'));
+    {
+        soci::session sql(pool_);
+        db::ObjectDao(sql).add_reference(content_hash, content.size());
+        db::FileDao(sql).create({file_id, alice.user_id, content_hash, "report.txt", {}});
+    }
+
+    HttpServer server("127.0.0.1", 9999);
+    RequestAuthenticator request_authenticator(auth_service);
+    FileService file_service(pool_, ObjectStore("./storage_test"));
+    FileApiRouter router(server, file_service, request_authenticator);
+
+    const std::string file_id_hex = "646f776e6c6f61642d66696c65303030";
+    const HttpResponse response = download_file(router, file_id_hex, alice.session_token);
+
+    EXPECT_EQ(response.get_status_code(), 200);
+    EXPECT_TRUE(response.has_file_body());
+    EXPECT_EQ(response.get_file_size(), content.size());
+    EXPECT_EQ(response.get_headers().at("Content-Disposition"), "attachment; filename=\"report.txt\"");
+
+    const HttpResponse forbidden_response = download_file(router, file_id_hex, bob.session_token);
+    EXPECT_EQ(forbidden_response.get_status_code(), 404);
+
+    ::unlink(commit.objectPath.c_str());
 }
 
 } // namespace filelink

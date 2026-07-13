@@ -55,7 +55,7 @@ if [[ -z "$session_cookie" ]]; then
     exit 1
 fi
 
-# 2. 上传文件获取 hash (采用 TUS 协议)
+# 2. 上传文件并取得逻辑文件 ID（采用 TUS 协议）
 resp_headers=$(mktemp)
 "$curl" --noproxy "*" -i -X POST -H "Cookie: $session_cookie" \
     -H "Upload-Length: ${#test_data}" -H "Upload-Metadata: filename ZG93bmxvYWQudHh0" \
@@ -74,29 +74,31 @@ patch_resp="$("$curl" --noproxy "*" -i -X PATCH -H "Cookie: $session_cookie" \
     -H "Content-Type: application/offset+octet-stream" -H "Upload-Offset: 0" \
     -d "$test_data" --silent --show-error "$location")"
 
-# 轮询获取会话状态，提取最终哈希值
+# 轮询获取会话状态，提取最终逻辑文件 ID
 completed=false
-hash=""
+file_id=""
 
 for _ in {1..50}; do
     get_resp="$("$curl" --noproxy "*" -H "Cookie: $session_cookie" --silent --show-error "$location")"
     if [[ "$get_resp" == *"\"state\":\"COMPLETED\""* ]]; then
         completed=true
-        hash=$(echo "$get_resp" | grep -o '"content_hash":"[^"]*' | cut -d'"' -f4 || true)
+        file_id=$(echo "$get_resp" | grep -o '"file_id":"[^"]*' | cut -d'"' -f4 || true)
         break
     fi
     sleep 0.05
 done
 
-if [[ "$completed" != "true" || -z "$hash" ]]; then
-    echo "Upload session failed to complete or hash is empty" >&2
+if [[ "$completed" != "true" || -z "$file_id" ]]; then
+    echo "Upload session failed to complete or file ID is empty" >&2
     exit 1
 fi
 
-echo "Uploaded with hash: $hash"
+echo "Uploaded file: $file_id"
 
-# 2. 通过 hash 下载文件
-downloaded_data="$("$curl" --noproxy "*" --silent --show-error "http://127.0.0.1:${port}/objects/$hash")"
+# 3. 通过私有文件地址下载文件
+downloaded_data="$("$curl" --noproxy "*" --silent --show-error \
+    -H "Cookie: $session_cookie" \
+    "http://127.0.0.1:${port}/files/$file_id/download")"
 
 if [[ "$downloaded_data" != "$test_data" ]]; then
     echo "Download mismatch!" >&2
@@ -105,10 +107,11 @@ if [[ "$downloaded_data" != "$test_data" ]]; then
     exit 1
 fi
 
-# 3. 验证无效 hash 返回 404/400
-bad_resp="$("$curl" --noproxy "*" --silent --show-error --write-out "%{http_code}" -o /dev/null "http://127.0.0.1:${port}/objects/badhash")"
-if [[ "$bad_resp" != "400" && "$bad_resp" != "404" ]]; then
-    echo "Expected 400 or 404 for bad hash, got: $bad_resp" >&2
+# 4. 验证私有下载拒绝未认证请求
+unauthenticated_status="$("$curl" --noproxy "*" --silent --show-error --write-out "%{http_code}" -o /dev/null \
+    "http://127.0.0.1:${port}/files/$file_id/download")"
+if [[ "$unauthenticated_status" != "401" ]]; then
+    echo "Expected 401 for unauthenticated download, got: $unauthenticated_status" >&2
     exit 1
 fi
 

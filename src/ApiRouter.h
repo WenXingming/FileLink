@@ -1,6 +1,5 @@
 #pragma once
 
-#include "DownloadService.h"
 #include "StaticFileService.h"
 #include "auth/RequestAuthenticator.h"
 #include "tudou/http/HttpServer.h"
@@ -15,7 +14,7 @@ class UploadService;
 class ApiRouter {
     friend class TusControlApiTest;
 public:
-    ApiRouter(HttpServer& server, DownloadService& downloadService, StaticFileService& staticFileService,
+    ApiRouter(HttpServer& server, StaticFileService& staticFileService,
         UploadService& uploadService, RequestAuthenticator& request_authenticator);
 
     void register_routes();
@@ -25,9 +24,6 @@ private:
     void handle_health(const HttpRequest& req, HttpResponse& response);
     void handle_index(const HttpRequest& req, HttpResponse& response);
     void handle_static(const HttpRequest& req, HttpResponse& response);
-
-    // Download
-    void handle_download(const HttpRequest& req, HttpResponse& response);
 
     // Upload. 使用 Tus API Handlers 协议实现断点续传
     void handle_tus_options(const HttpRequest& req, HttpResponse& response);        // 功能协商。 OPTIONS /uploads
@@ -41,7 +37,6 @@ private:
 
 private:
     HttpServer& server_;                    // 底层 HTTP 服务器实例
-    DownloadService& downloadService_;      // 文件下载服务实例
     StaticFileService& staticFileService_;  // 静态资源服务实例
     UploadService& uploadService_;          // 文件上传服务实例
     RequestAuthenticator& requestAuthenticator_;

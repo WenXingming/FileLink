@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ObjectStore.h"
 #include "db/File.h"
 
 #include <vector>
@@ -15,12 +16,16 @@ namespace filelink {
 // ========================================================
 class FileService {
 public:
-    explicit FileService(soci::connection_pool& pool) : pool_(pool) {}
+    FileService(soci::connection_pool& pool, ObjectStore store)
+        : pool_(pool), store_(std::move(store)) {}
 
     void list_files(const std::string& owner_user_id, std::vector<db::File>& out_files);
+    bool find_file(const std::string& owner_user_id, const std::string& file_id, db::File& out_file);
+    std::string object_path(const db::File& file) const;
 
 private:
     soci::connection_pool& pool_;
+    ObjectStore store_;
 };
 
 } // namespace filelink
