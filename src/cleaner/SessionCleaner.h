@@ -8,6 +8,9 @@ class connection_pool;
 
 namespace filelink {
 
+// =====================================================================
+// SessionCleaner：清理过期上传会话及其尚未发布的临时分片文件。
+// =====================================================================
 class SessionCleaner {
 public:
     SessionCleaner(soci::connection_pool& pool, std::string storageRoot);
@@ -16,10 +19,6 @@ public:
     SessionCleaner(const SessionCleaner&) = delete;
     SessionCleaner& operator=(const SessionCleaner&) = delete;
 
-    /**
-     * @brief 扫描并物理清理已过期的上传会话及临时文件
-     * @return 成功清理的会话数量
-     */
     int cleanup_expired_sessions();
 
 private:

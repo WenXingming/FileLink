@@ -9,6 +9,9 @@ namespace filelink {
 class AuthService;
 struct AuthenticatedUser;
 
+// =====================================================================
+// RequestAuthResult：从 HTTP 请求解析当前用户身份后的处理结果。
+// =====================================================================
 enum class RequestAuthResult {
     Authenticated,
     Unauthorized,

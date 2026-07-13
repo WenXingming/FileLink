@@ -1,13 +1,14 @@
 #include "AppConfig.h"
 #include "ObjectStore.h"
 #include "StaticFileService.h"
-#include "ApiRouter.h"
 #include "auth/AuthApiRouter.h"
 #include "auth/AuthService.h"
 #include "auth/RequestAuthenticator.h"
 #include "files/FileApiRouter.h"
 #include "files/FileService.h"
-#include "UploadService.h"
+#include "site/SiteRouter.h"
+#include "uploads/UploadApiRouter.h"
+#include "uploads/UploadService.h"
 #include "cleaner/SessionCleaner.h"
 #include "cleaner/DedupRunner.h"
 #include "tudou/http/HttpServer.h"
@@ -70,12 +71,14 @@ int main(int argc, char* argv[]) {
         filelink::FileService fileService(mysqlPool, filelink::ObjectStore(config.storageRoot));
         
         // 挂载 API 路由模块
-        filelink::ApiRouter router(server, staticFileService, uploadService, requestAuthenticator);
-        router.register_routes();
+        filelink::SiteRouter siteRouter(server, staticFileService);
+        siteRouter.register_routes();
         filelink::AuthApiRouter authRouter(server, authService, requestAuthenticator);
         authRouter.register_routes();
         filelink::FileApiRouter fileRouter(server, fileService, requestAuthenticator);
         fileRouter.register_routes();
+        filelink::UploadApiRouter uploadRouter(server, uploadService, requestAuthenticator);
+        uploadRouter.register_routes();
 
         server.start();
         return 0;

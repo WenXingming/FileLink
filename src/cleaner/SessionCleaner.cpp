@@ -1,4 +1,5 @@
 #include "SessionCleaner.h"
+#include "db/SociSessionLease.h"
 #include <soci/soci.h>
 #include <soci/connection-pool.h>
 #include <soci/rowset.h>
@@ -13,16 +14,6 @@
 namespace filelink {
 
 namespace {
-
-class SociSessionLease {
-public:
-    SociSessionLease(soci::connection_pool& pool) : pool_(pool), pos_(pool.lease()) {}
-    ~SociSessionLease() { pool_.give_back(pos_); }
-    soci::session& get() { return pool_.at(pos_); }
-private:
-    soci::connection_pool& pool_;
-    std::size_t pos_;
-};
 
 std::string bytes_to_hex(const std::string& bytes) {
     std::stringstream ss;
@@ -42,7 +33,7 @@ SessionCleaner::SessionCleaner(soci::connection_pool& pool, std::string storageR
 int SessionCleaner::cleanup_expired_sessions() {
     int successCount = 0;
     try {
-        SociSessionLease lease(pool_);
+        db::SociSessionLease lease(pool_);
         soci::session& sql = lease.get();
 
         // 1. 查询所有已过期的处于 UPLOADING 状态的会话

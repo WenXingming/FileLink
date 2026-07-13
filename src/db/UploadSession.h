@@ -8,6 +8,9 @@
 namespace filelink {
 namespace db {
 
+// ====================================================================
+// UploadSession：记录一个用户上传任务的进度、状态和完成结果。
+// ====================================================================
 struct UploadSession {
     std::string upload_id;       // BINARY(16) mapped to std::string
     std::string owner_user_id;   // BINARY(16) mapped to std::string
@@ -29,6 +32,9 @@ struct UploadSession {
     std::tm expires_at{};
 };
 
+// =====================================================================
+// UploadSessionDao：读写 upload_sessions 表中的上传会话记录。
+// =====================================================================
 class UploadSessionDao {
 public:
     explicit UploadSessionDao(soci::session& sql) : sql_(sql) {}

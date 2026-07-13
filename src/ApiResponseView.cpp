@@ -5,11 +5,42 @@
 
 namespace filelink {
 
+namespace {
+
+const char* status_message(int status_code) {
+    switch (status_code) {
+    case 200:
+        return "OK";
+    case 400:
+        return "Bad Request";
+    case 401:
+        return "Unauthorized";
+    case 403:
+        return "Forbidden";
+    case 404:
+        return "Not Found";
+    case 409:
+        return "Conflict";
+    case 413:
+        return "Payload Too Large";
+    default:
+        return "Internal Server Error";
+    }
+}
+
+std::string hex_encode(const std::string& bytes) {
+    std::stringstream stream;
+    stream << std::hex << std::setfill('0');
+    for (unsigned char value : bytes) {
+        stream << std::setw(2) << static_cast<int>(value);
+    }
+    return stream.str();
+}
+
+} // namespace
+
 HttpResponse ApiResponseView::json(int statusCode, const std::string& jsonBody) {
-    HttpResponse response = HttpResponse::plain_text(statusCode, 
-        statusCode == 200 ? "OK" : 
-        (statusCode == 400 ? "Bad Request" : "Internal Server Error"), 
-        jsonBody);
+    HttpResponse response = HttpResponse::plain_text(statusCode, status_message(statusCode), jsonBody);
     response.set_header("Content-Type", "application/json");
     return response;
 }
@@ -108,47 +139,23 @@ HttpResponse ApiResponseView::tus_error(int statusCode, const std::string& statu
 }
 
 HttpResponse ApiResponseView::tus_session_status(const db::UploadSession& session) {
-    std::string uploadIdHex;
-    {
-        std::stringstream ss;
-        ss << std::hex << std::setfill('0');
-        for (unsigned char c : session.upload_id) {
-            ss << std::setw(2) << static_cast<int>(c);
-        }
-        uploadIdHex = ss.str();
-    }
-
-    std::string contentHashHex;
-    if (session.has_content_hash) {
-        std::stringstream ss;
-        ss << std::hex << std::setfill('0');
-        for (unsigned char c : session.content_hash) {
-            ss << std::setw(2) << static_cast<int>(c);
-        }
-        contentHashHex = ss.str();
-    }
-
-    std::string completedFileIdHex;
-    if (session.has_completed_file_id) {
-        std::stringstream ss;
-        ss << std::hex << std::setfill('0');
-        for (unsigned char c : session.completed_file_id) {
-            ss << std::setw(2) << static_cast<int>(c);
-        }
-        completedFileIdHex = ss.str();
-    }
+    const std::string upload_id_hex = hex_encode(session.upload_id);
+    const std::string content_hash_hex = session.has_content_hash
+        ? hex_encode(session.content_hash) : "";
+    const std::string completed_file_id_hex = session.has_completed_file_id
+        ? hex_encode(session.completed_file_id) : "";
 
     std::string body = "{";
-    body += R"("upload_id":")" + uploadIdHex + R"(",)";
+    body += R"("upload_id":")" + upload_id_hex + R"(",)";
     body += R"("state":")" + session.state + R"(",)";
     body += R"("file_name":")" + escape_json(session.file_name) + R"(",)";
     body += R"("total_size":)" + std::to_string(session.total_size) + ",";
     body += R"("committed_offset":)" + std::to_string(session.committed_offset);
     if (session.has_content_hash) {
-        body += R"(,"content_hash":")" + contentHashHex + R"(")";
+        body += R"(,"content_hash":")" + content_hash_hex + R"(")";
     }
     if (session.has_completed_file_id) {
-        body += R"(,"file_id":")" + completedFileIdHex + R"(")";
+        body += R"(,"file_id":")" + completed_file_id_hex + R"(")";
     }
     if (session.has_failure_reason) {
         body += R"(,"failure_reason":")" + escape_json(session.failure_reason) + R"(")";

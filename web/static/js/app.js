@@ -11,7 +11,7 @@ const uploadButton = document.getElementById('uploadButton');
 const pauseButton = document.getElementById('pauseButton');
 const cancelButton = document.getElementById('cancelButton');
 const resultArea = document.getElementById('resultArea');
-const shareLink = document.getElementById('shareLink');
+const downloadLink = document.getElementById('downloadLink');
 const copyButton = document.getElementById('copyButton');
 const errorMessage = document.getElementById('errorMessage');
 const progressContainer = document.getElementById('progressContainer');
@@ -23,9 +23,14 @@ const dashboardThemeToggle = document.getElementById('dashboardThemeToggle');
 // Login Panel & Auth modal DOM
 const loginUser = document.getElementById('loginUser');
 const loginPassword = document.getElementById('loginPassword');
+const confirmPassword = document.getElementById('confirmPassword');
+const confirmPasswordField = document.getElementById('confirmPasswordField');
 const loginButton = document.getElementById('loginButton');
-const registerButton = document.getElementById('registerButton');
 const logoutButton = document.getElementById('logoutButton');
+const loginModeButton = document.getElementById('loginModeButton');
+const registerModeButton = document.getElementById('registerModeButton');
+const authModalTitle = document.getElementById('authModalTitle');
+const authModalSubtitle = document.getElementById('authModalSubtitle');
 const loginStatus = document.getElementById('loginStatus');
 const authErrorMessage = document.getElementById('authErrorMessage');
 const authToggle = document.getElementById('authToggle');
@@ -51,13 +56,14 @@ const panelTitle = document.getElementById('panelTitle');
 
 const THEME_STORAGE_KEY = 'fileshare.theme';
 let currentUser = null;
+let authMode = 'login';
 
 let selectedFile = null;
 let currentXhr = null;
 let isCancelled = false;
 let isPaused = false;
 
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
 
 // SVG Icons
 const sunIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`;
@@ -233,8 +239,8 @@ async function copyToClipboard(text) {
 
 // SPA Routing & Navigation
 function navigateToDashboard() {
-    landingView.style.display = 'none';
-    dashboardView.style.display = 'flex';
+    landingView.hidden = true;
+    dashboardView.classList.add('is-visible');
     
     // Default active panel
     switchPanel('upload');
@@ -242,8 +248,8 @@ function navigateToDashboard() {
 }
 
 function navigateToLanding() {
-    dashboardView.style.display = 'none';
-    landingView.style.display = 'flex';
+    dashboardView.classList.remove('is-visible');
+    landingView.hidden = false;
 }
 
 landingLogo.addEventListener('click', () => {
@@ -335,8 +341,8 @@ function resetUploadDownloadPageState() {
     fileName.textContent = '';
     fileSize.textContent = '';
 
-    shareLink.href = '#';
-    shareLink.textContent = '';
+    downloadLink.href = '#';
+    downloadLink.textContent = '';
 
     const uploadIconContainer = document.getElementById('uploadIconContainer');
     if (uploadIconContainer) {
@@ -386,7 +392,7 @@ function renderFiles(files, emptyMessage) {
         return `<tr><td><div class="table-file-name-cell">${getFileIconSvg(file.name)}
             <span class="table-file-name-text" title="${name}">${name}</span></div></td>
             <td><div class="table-actions"><a href="/files/${fileId}/download" class="table-action-btn">下载</a>
-            <button class="table-action-btn delete-file-btn" data-file-id="${fileId}" style="color: var(--error-color);">删除</button>
+            <button class="table-action-btn delete-file-btn" data-file-id="${fileId}" type="button">删除</button>
             </div></td></tr>`;
     }).join('');
 
@@ -444,7 +450,6 @@ function updateAuthUI() {
     }
 
     loginButton.disabled = isAuthenticated;
-    registerButton.disabled = isAuthenticated;
     uploadArea.classList.toggle('disabled', !isAuthenticated);
     uploadButton.disabled = !isAuthenticated;
     if (landingLoginBtn) landingLoginBtn.textContent = isAuthenticated ? `你好, ${displayUsername}` : '登录 / 注册';
@@ -454,6 +459,26 @@ function showAuthModal() {
     clearAuthError();
     authOverlay.classList.add('show');
     authOverlay.setAttribute('aria-hidden', 'false');
+}
+
+function setAuthMode(nextMode) {
+    authMode = nextMode;
+    const isRegistration = authMode === 'register';
+
+    confirmPasswordField.hidden = !isRegistration;
+    confirmPassword.value = '';
+    loginPassword.autocomplete = isRegistration ? 'new-password' : 'current-password';
+    loginButton.textContent = isRegistration ? '创建账户' : '登录';
+    authModalTitle.textContent = isRegistration ? '创建 FileLink 账户' : '登录 FileLink';
+    authModalSubtitle.textContent = isRegistration
+        ? '创建后会自动登录，并拥有独立的私有文件库'
+        : '登录后可管理自己的私有文件';
+
+    loginModeButton.classList.toggle('active', !isRegistration);
+    loginModeButton.setAttribute('aria-selected', String(!isRegistration));
+    registerModeButton.classList.toggle('active', isRegistration);
+    registerModeButton.setAttribute('aria-selected', String(isRegistration));
+    clearAuthError();
 }
 
 function hideAuthModal() {
@@ -530,7 +555,7 @@ uploadArea.addEventListener('drop', (e) => {
 function handleFileSelect(file) {
     resetUI();
     if (file.size > MAX_UPLOAD_BYTES) {
-        showError('文件大小不能超过 5GB');
+        showError('文件大小不能超过 10GB');
         return;
     }
 
@@ -833,21 +858,34 @@ function pollTusStatus(sessionUrl) {
 
 function credentials() {
     const username = loginUser.value.trim();
-    const password = loginPassword.value.trim();
+    const password = loginPassword.value;
     if (!username || !password) {
         showAuthError('请输入用户名和密码');
         return null;
     }
+    if (authMode === 'register') {
+        if (!confirmPassword.value) {
+            showAuthError('请再次输入密码进行确认');
+            return null;
+        }
+        if (password !== confirmPassword.value) {
+            showAuthError('两次输入的密码不一致');
+            return null;
+        }
+    }
     return {username, password};
 }
 
-async function submitAuth(path, actionName) {
+async function submitAuth() {
     const body = credentials();
     if (!body) return;
 
+    const isRegistration = authMode === 'register';
+    const path = isRegistration ? '/auth/register' : '/auth/login';
+    const actionName = isRegistration ? '创建账户' : '登录';
+
     try {
         loginButton.disabled = true;
-        registerButton.disabled = true;
         const response = await fetch(path, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -869,8 +907,9 @@ async function submitAuth(path, actionName) {
     }
 }
 
-loginButton.addEventListener('click', () => submitAuth('/auth/login', '登录'));
-registerButton.addEventListener('click', () => submitAuth('/auth/register', '注册'));
+loginModeButton.addEventListener('click', () => setAuthMode('login'));
+registerModeButton.addEventListener('click', () => setAuthMode('register'));
+loginButton.addEventListener('click', submitAuth);
 
 async function refreshCurrentUser() {
     try {
@@ -904,9 +943,8 @@ async function executeLogout() {
 logoutButton.addEventListener('click', hideAuthModal);
 sidebarLogoutBtn.addEventListener('click', executeLogout);
 
-// Copy file share link
 copyButton.addEventListener('click', () => {
-    const link = shareLink.href;
+    const link = downloadLink.href;
     copyToClipboard(link).then((ok) => {
         const originalText = copyButton.textContent;
         copyButton.textContent = ok ? '已复制' : '复制失败';
@@ -915,8 +953,8 @@ copyButton.addEventListener('click', () => {
 });
 
 function showSuccess(url) {
-    shareLink.href = url;
-    shareLink.textContent = url;
+    downloadLink.href = url;
+    downloadLink.textContent = url;
     resultArea.style.display = 'block';
     uploadButton.style.display = 'none';
     cancelButton.style.display = 'none';

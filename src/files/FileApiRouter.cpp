@@ -79,6 +79,21 @@ HttpResponse json_response(int status_code, const char* status_message,
     return response;
 }
 
+bool authenticate_request(RequestAuthenticator& authenticator, const HttpRequest& request,
+    AuthenticatedUser& out_user, HttpResponse& response) {
+    switch (authenticator.authenticate(request, out_user)) {
+    case RequestAuthResult::Authenticated:
+        return true;
+    case RequestAuthResult::Unauthorized:
+        response = json_response(401, "Unauthorized", {{"message", "Unauthorized"}});
+        return false;
+    case RequestAuthResult::SystemError:
+        response = json_response(500, "Internal Server Error", {{"message", "Authentication failed"}});
+        return false;
+    }
+    return false;
+}
+
 } // namespace
 
 void FileApiRouter::register_routes() {
@@ -106,16 +121,7 @@ void FileApiRouter::handle_download(const HttpRequest& request, HttpResponse& re
     }
 
     AuthenticatedUser user;
-    switch (request_authenticator_.authenticate(request, user)) {
-    case RequestAuthResult::Authenticated:
-        break;
-    case RequestAuthResult::Unauthorized:
-        response = json_response(401, "Unauthorized", {{"message", "Unauthorized"}});
-        return;
-    case RequestAuthResult::SystemError:
-        response = json_response(500, "Internal Server Error", {{"message", "Authentication failed"}});
-        return;
-    }
+    if (!authenticate_request(request_authenticator_, request, user, response)) return;
 
     try {
         db::File file;
@@ -153,16 +159,7 @@ void FileApiRouter::handle_delete(const HttpRequest& request, HttpResponse& resp
     }
 
     AuthenticatedUser user;
-    switch (request_authenticator_.authenticate(request, user)) {
-    case RequestAuthResult::Authenticated:
-        break;
-    case RequestAuthResult::Unauthorized:
-        response = json_response(401, "Unauthorized", {{"message", "Unauthorized"}});
-        return;
-    case RequestAuthResult::SystemError:
-        response = json_response(500, "Internal Server Error", {{"message", "Authentication failed"}});
-        return;
-    }
+    if (!authenticate_request(request_authenticator_, request, user, response)) return;
 
     try {
         if (!file_service_.delete_file(user.user_id, file_id)) {
@@ -177,16 +174,7 @@ void FileApiRouter::handle_delete(const HttpRequest& request, HttpResponse& resp
 
 void FileApiRouter::handle_list_files(const HttpRequest& request, HttpResponse& response) {
     AuthenticatedUser user;
-    switch (request_authenticator_.authenticate(request, user)) {
-    case RequestAuthResult::Authenticated:
-        break;
-    case RequestAuthResult::Unauthorized:
-        response = json_response(401, "Unauthorized", {{"message", "Unauthorized"}});
-        return;
-    case RequestAuthResult::SystemError:
-        response = json_response(500, "Internal Server Error", {{"message", "Authentication failed"}});
-        return;
-    }
+    if (!authenticate_request(request_authenticator_, request, user, response)) return;
 
     try {
         std::vector<db::File> files;

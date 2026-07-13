@@ -1,6 +1,7 @@
 #include "AuthService.h"
 
 #include "PasswordHasher.h"
+#include "db/SociSessionLease.h"
 #include "db/User.h"
 #include "db/UserSession.h"
 
@@ -16,18 +17,6 @@
 namespace filelink {
 
 namespace {
-
-class SociSessionLease {
-public:
-    explicit SociSessionLease(soci::connection_pool& pool) : pool_(pool), pos_(pool.lease()) {}
-    ~SociSessionLease() { pool_.give_back(pos_); }
-
-    soci::session& get() { return pool_.at(pos_); }
-
-private:
-    soci::connection_pool& pool_;
-    std::size_t pos_;
-};
 
 bool is_valid_username(const std::string& username) {
     if (username.size() < 3 || username.size() > 64) {
@@ -115,7 +104,7 @@ RegisterResult AuthService::register_user(const std::string& username,
     }
 
     try {
-        SociSessionLease lease(pool_);
+        db::SociSessionLease lease(pool_);
         soci::session& sql = lease.get();
         db::UserDao users(sql);
         db::User existing;
@@ -145,7 +134,7 @@ LoginResult AuthService::login_user(const std::string& username,
     const std::string& password,
     AuthenticatedSession& out_session) {
     try {
-        SociSessionLease lease(pool_);
+        db::SociSessionLease lease(pool_);
         soci::session& sql = lease.get();
         db::User user;
         if (!db::UserDao(sql).find_by_username(username, user)
@@ -177,7 +166,7 @@ CurrentUserResult AuthService::current_user(const std::string& session_token,
     }
 
     try {
-        SociSessionLease lease(pool_);
+        db::SociSessionLease lease(pool_);
         soci::session& sql = lease.get();
         db::UserSession session;
         if (!db::UserSessionDao(sql).find_active(hash_token(token), session)) {
@@ -208,7 +197,7 @@ LogoutResult AuthService::logout(const std::string& session_token) {
     }
 
     try {
-        SociSessionLease lease(pool_);
+        db::SociSessionLease lease(pool_);
         db::UserSessionDao(lease.get()).remove(hash_token(token));
         return LogoutResult::Success;
     } catch (const std::exception&) {

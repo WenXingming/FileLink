@@ -23,13 +23,14 @@
 
 ## 项目亮点 ✨
 
-| 方向 | 当前能力 |
-| --- | --- |
-| 存储引擎 | 基于 Blake3 的极速哈希计算、严格的 `fdatasync` + `link` CAS 原子发布、多线程无锁复用 |
-| 容灾与一致性 | 基于内容寻址的对象提交、哈希一致性校验及临时文件安全清理机制，确保发布完整性 |
-| 数据库接入 | 使用 SOCI 管理 SQL 绑定、事务和连接池，底层通过官方 `libmysqlclient` 连接 MySQL |
-| 高并发网络 | 强依赖底层 `Tudou` 框架 (基于 Epoll 的多线程 Reactor 模型) 提供 HTTP 协议接入和路由分发 |
-| 工程配套 | 极致优雅的 CMake FetchContent 构建系统、GTest 单元测试与集成测试、Docker Compose 一键外围部署 |
+
+| 方向         | 当前能力                                                                                      |
+| -------------- | ----------------------------------------------------------------------------------------------- |
+| 存储引擎     | 基于 Blake3 的极速哈希计算、严格的`fdatasync` + `link` CAS 原子发布、多线程无锁复用           |
+| 容灾与一致性 | 基于内容寻址的对象提交、哈希一致性校验及临时文件安全清理机制，确保发布完整性                  |
+| 数据库接入   | 使用 SOCI 管理 SQL 绑定、事务和连接池，底层通过官方`libmysqlclient` 连接 MySQL                |
+| 高并发网络   | 强依赖底层`Tudou` 框架 (基于 Epoll 的多线程 Reactor 模型) 提供 HTTP 协议接入和路由分发        |
+| 工程配套     | 极致优雅的 CMake FetchContent 构建系统、GTest 单元测试与集成测试、Docker Compose 一键外围部署 |
 
 <a id="快速开始"></a>
 
@@ -156,6 +157,7 @@ flowchart TD
   class Infrastructure,ObjectStore tcpLayer
   class DI osLayer
 ```
+
 *(如果需要阅读文件级物理依赖图，请查看项目生成的最新 `docs/deps_weak.svg` 图像)*
 
 <a id="核心设计"></a>

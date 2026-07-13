@@ -4,6 +4,9 @@
 
 namespace filelink {
 
+// ====================================================================
+// DedupRunner：离线扫描对象目录，并用硬链接合并重复物理文件。
+// ====================================================================
 class DedupRunner {
 public:
     explicit DedupRunner(std::string storageRoot);
@@ -12,10 +15,6 @@ public:
     DedupRunner(const DedupRunner&) = delete;
     DedupRunner& operator=(const DedupRunner&) = delete;
 
-    /**
-     * @brief 扫描存储目录并对重复物理文件进行原子硬链接替换
-     * @return 成功合并替换的重复文件副本数量
-     */
     int run_dedup();
 
 private:
