@@ -13,6 +13,19 @@ CREATE TABLE users (
     UNIQUE KEY uq_users_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 会话令牌只以哈希形式落库；浏览器 Cookie 保存原始随机令牌。
+CREATE TABLE user_sessions (
+    token_hash BINARY(32) NOT NULL,
+    user_id BINARY(16) NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    expires_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (token_hash),
+    CONSTRAINT fk_user_sessions_user
+        FOREIGN KEY (user_id) REFERENCES users (user_id),
+    INDEX idx_user_sessions_user (user_id),
+    INDEX idx_user_sessions_expiry (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 -- Object 是内容寻址存储中的唯一、不可变字节序列；物理路径由 content_hash 推导。
 CREATE TABLE objects (
     content_hash BINARY(32) NOT NULL,
@@ -83,4 +96,5 @@ CREATE TABLE upload_sessions (
 DROP TABLE upload_sessions;
 DROP TABLE files;
 DROP TABLE objects;
+DROP TABLE user_sessions;
 DROP TABLE users;

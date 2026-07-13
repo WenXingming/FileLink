@@ -98,7 +98,7 @@ TEST_F(TusControlApiTest, OptionsReturnsCapabilities) {
     EXPECT_EQ(resp.get_headers().at("Tus-Resumable"), "1.0.0");
     EXPECT_EQ(resp.get_headers().at("Tus-Version"), "1.0.0");
     EXPECT_FALSE(resp.get_headers().at("Tus-Max-Size").empty());
-    EXPECT_EQ(resp.get_headers().at("Tus-Extension"), "creation,expiration");
+    EXPECT_EQ(resp.get_headers().at("Tus-Extension"), "creation,expiration,termination");
 }
 
 TEST_F(TusDatabaseApiTest, HeadReturnsOffsetForExistingSession) {
