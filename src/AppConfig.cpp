@@ -26,6 +26,10 @@ AppConfig parse_app_config(const std::vector<std::string>& args) {
     app.add_flag("--cleanup-expired", config.cleanupExpiredOnly, "仅清理过期的会话与临时文件并退出");
     app.add_flag("--reclaim-pending-objects", config.reclaimPendingObjectsOnly,
         "离线回收零引用对象并退出");
+    app.add_flag("--scan-orphaned-objects", config.scanOrphanedObjectsOnly,
+        "离线扫描没有 objects 记录的对象文件并退出");
+    app.add_flag("--reclaim-orphaned-objects", config.reclaimOrphanedObjectsOnly,
+        "离线删除没有 objects 记录的对象文件并退出");
     app.add_flag("--dedup", config.runDedupOnly, "仅对存储目录进行重复文件扫描与硬链接合并并退出");
 
     // MySQL 配置

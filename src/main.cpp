@@ -10,6 +10,8 @@
 #include "uploads/UploadApiRouter.h"
 #include "uploads/UploadService.h"
 #include "cleaner/UploadSessionCleaner.h"
+#include "cleaner/ObjectOrphanReclaimer.h"
+#include "cleaner/ObjectOrphanScanner.h"
 #include "cleaner/ObjectReclaimer.h"
 #include "cleaner/DedupRunner.h"
 #include "tudou/http/HttpServer.h"
@@ -62,6 +64,23 @@ int main(int argc, char* argv[]) {
             filelink::ObjectReclaimer reclaimer(mysqlPool, filelink::ObjectStore(config.storageRoot));
             const int count = reclaimer.reclaim_pending_objects();
             std::cout << "Successfully reclaimed " << count << " unreferenced objects.\n";
+            return 0;
+        }
+
+        if (config.scanOrphanedObjectsOnly) {
+            filelink::ObjectOrphanScanner scanner(mysqlPool, config.storageRoot);
+            const std::vector<std::string> paths = scanner.find_orphaned_object_paths();
+            for (const std::string& path : paths) {
+                std::cout << path << '\n';
+            }
+            std::cout << "Found " << paths.size() << " orphaned objects.\n";
+            return 0;
+        }
+
+        if (config.reclaimOrphanedObjectsOnly) {
+            filelink::ObjectOrphanReclaimer reclaimer(mysqlPool, config.storageRoot);
+            const int count = reclaimer.reclaim_orphaned_objects();
+            std::cout << "Successfully reclaimed " << count << " orphaned objects.\n";
             return 0;
         }
 

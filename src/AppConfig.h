@@ -20,6 +20,8 @@ struct AppConfig {
     std::string logRoot = "./logs";
     bool cleanupExpiredOnly = false;
     bool reclaimPendingObjectsOnly = false;
+    bool scanOrphanedObjectsOnly = false;
+    bool reclaimOrphanedObjectsOnly = false;
     bool runDedupOnly = false;
 
     db::MySqlConfig mysql;

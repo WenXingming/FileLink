@@ -64,6 +64,22 @@ TEST_F(AppConfigTest, EnablesOfflineObjectReclamation) {
     EXPECT_TRUE(config.reclaimPendingObjectsOnly);
 }
 
+TEST_F(AppConfigTest, EnablesReadOnlyOrphanedObjectScan) {
+    const filelink::AppConfig config = filelink::parse_app_config({
+        "--scan-orphaned-objects"
+    });
+
+    EXPECT_TRUE(config.scanOrphanedObjectsOnly);
+}
+
+TEST_F(AppConfigTest, EnablesOfflineOrphanedObjectReclamation) {
+    const filelink::AppConfig config = filelink::parse_app_config({
+        "--reclaim-orphaned-objects"
+    });
+
+    EXPECT_TRUE(config.reclaimOrphanedObjectsOnly);
+}
+
 TEST_F(AppConfigTest, ReadsTomlConfig) {
     write_config(
         "address = \"127.0.0.1\"\n"
