@@ -22,6 +22,7 @@ if(FILELINK_BUILD_INTEGRATION_TESTS)
         TusControlApiTest.cpp
         UploadSessionDaoTest.cpp
         ObjectDaoTest.cpp
+        FileDaoTest.cpp
         UserDaoTest.cpp
         UserSessionDaoTest.cpp
         AuthServiceTest.cpp
