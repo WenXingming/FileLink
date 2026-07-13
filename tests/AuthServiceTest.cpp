@@ -33,7 +33,7 @@ protected:
 
 TEST_F(AuthServiceTest, RegistersUserAndCreatesSession) {
     filelink::AuthService auth(pool_);
-    filelink::Registration registration;
+    filelink::AuthenticatedSession registration;
 
     ASSERT_EQ(auth.register_user("alice", "correct-password", registration),
         filelink::RegisterResult::Success);
@@ -56,7 +56,7 @@ TEST_F(AuthServiceTest, RegistersUserAndCreatesSession) {
 
 TEST_F(AuthServiceTest, RejectsInvalidAndDuplicateRegistration) {
     filelink::AuthService auth(pool_);
-    filelink::Registration registration;
+    filelink::AuthenticatedSession registration;
 
     EXPECT_EQ(auth.register_user("no space", "correct-password", registration),
         filelink::RegisterResult::InvalidUsername);
@@ -66,4 +66,42 @@ TEST_F(AuthServiceTest, RejectsInvalidAndDuplicateRegistration) {
         filelink::RegisterResult::Success);
     EXPECT_EQ(auth.register_user("alice", "another-password", registration),
         filelink::RegisterResult::UsernameTaken);
+}
+
+TEST_F(AuthServiceTest, LogsInAndCreatesAnotherSession) {
+    filelink::AuthService auth(pool_);
+    filelink::AuthenticatedSession registration;
+    ASSERT_EQ(auth.register_user("alice", "correct-password", registration),
+        filelink::RegisterResult::Success);
+
+    filelink::AuthenticatedSession login;
+    ASSERT_EQ(auth.login_user("alice", "correct-password", login),
+        filelink::LoginResult::Success);
+    EXPECT_EQ(login.user_id, registration.user_id);
+    EXPECT_NE(login.session_token, registration.session_token);
+
+    soci::session sql(pool_);
+    int session_count = 0;
+    sql << "SELECT COUNT(*) FROM user_sessions WHERE user_id = :id",
+        soci::into(session_count), soci::use(login.user_id);
+    EXPECT_EQ(session_count, 2);
+}
+
+TEST_F(AuthServiceTest, RejectsUnknownWrongPasswordAndDisabledUser) {
+    filelink::AuthService auth(pool_);
+    filelink::AuthenticatedSession session;
+
+    EXPECT_EQ(auth.login_user("missing", "correct-password", session),
+        filelink::LoginResult::InvalidCredentials);
+    ASSERT_EQ(auth.register_user("alice", "correct-password", session),
+        filelink::RegisterResult::Success);
+    EXPECT_EQ(auth.login_user("alice", "wrong-password", session),
+        filelink::LoginResult::InvalidCredentials);
+
+    {
+        soci::session sql(pool_);
+        sql << "UPDATE users SET disabled_at = NOW() WHERE username = 'alice'";
+    }
+    EXPECT_EQ(auth.login_user("alice", "correct-password", session),
+        filelink::LoginResult::InvalidCredentials);
 }

@@ -16,7 +16,13 @@ enum class RegisterResult {
     SystemError
 };
 
-struct Registration {
+enum class LoginResult {
+    Success,
+    InvalidCredentials,
+    SystemError
+};
+
+struct AuthenticatedSession {
     std::string user_id;
     std::string username;
     std::string session_token;
@@ -28,7 +34,10 @@ public:
 
     RegisterResult register_user(const std::string& username,
         const std::string& password,
-        Registration& out_registration);
+        AuthenticatedSession& out_session);
+    LoginResult login_user(const std::string& username,
+        const std::string& password,
+        AuthenticatedSession& out_session);
 
 private:
     soci::connection_pool& pool_;

@@ -69,11 +69,23 @@ std::tm session_expiry() {
     return result;
 }
 
+AuthenticatedSession create_session(soci::session& sql, const db::User& user) {
+    const std::string token = random_bytes(crypto_generichash_BYTES);
+
+    db::UserSession session;
+    session.token_hash = hash_token(token);
+    session.user_id = user.user_id;
+    session.expires_at = session_expiry();
+    db::UserSessionDao(sql).create(session);
+
+    return AuthenticatedSession{user.user_id, user.username, encode_token(token)};
+}
+
 } // namespace
 
 RegisterResult AuthService::register_user(const std::string& username,
     const std::string& password,
-    Registration& out_registration) {
+    AuthenticatedSession& out_session) {
     if (!is_valid_username(username)) {
         return RegisterResult::InvalidUsername;
     }
@@ -94,26 +106,44 @@ RegisterResult AuthService::register_user(const std::string& username,
         }
 
         const std::string user_id = random_bytes(16);
-        const std::string token = random_bytes(crypto_generichash_BYTES);
         db::User user;
         user.user_id = user_id;
         user.username = username;
         user.password_hash = PasswordHasher::hash(password);
 
-        db::UserSession session;
-        session.token_hash = hash_token(token);
-        session.user_id = user_id;
-        session.expires_at = session_expiry();
-
         soci::transaction transaction(sql);
         users.create(user);
-        db::UserSessionDao(sql).create(session);
+        AuthenticatedSession session = create_session(sql, user);
         transaction.commit();
 
-        out_registration = Registration{user_id, username, encode_token(token)};
+        out_session = session;
         return RegisterResult::Success;
     } catch (const std::exception&) {
         return RegisterResult::SystemError;
+    }
+}
+
+LoginResult AuthService::login_user(const std::string& username,
+    const std::string& password,
+    AuthenticatedSession& out_session) {
+    try {
+        SociSessionLease lease(pool_);
+        soci::session& sql = lease.get();
+        db::User user;
+        if (!db::UserDao(sql).find_by_username(username, user)
+            || user.is_disabled
+            || !PasswordHasher::verify(password, user.password_hash)) {
+            return LoginResult::InvalidCredentials;
+        }
+
+        soci::transaction transaction(sql);
+        AuthenticatedSession session = create_session(sql, user);
+        transaction.commit();
+
+        out_session = session;
+        return LoginResult::Success;
+    } catch (const std::exception&) {
+        return LoginResult::SystemError;
     }
 }
 
