@@ -34,7 +34,7 @@ CREATE TABLE objects (
     state VARCHAR(16) NOT NULL DEFAULT 'READY',
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     PRIMARY KEY (content_hash),
-    CONSTRAINT chk_object_state CHECK (state IN ('READY', 'PENDING_DELETE'))
+    CONSTRAINT chk_object_state CHECK (state IN ('READY', 'PENDING_DELETE', 'RECLAIMING'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- File 是用户看到的逻辑文件，多个 File 可引用同一去重 Object。

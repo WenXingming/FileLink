@@ -22,6 +22,24 @@ bool ObjectDao::remove_reference(const std::string& content_hash) {
     return statement.get_affected_rows() == 1;
 }
 
+bool ObjectDao::claim_pending_delete(const std::string& content_hash) {
+    soci::statement statement = (sql_.prepare
+        << "UPDATE objects SET state = 'RECLAIMING' "
+           "WHERE content_hash = :hash AND ref_count = 0 AND state = 'PENDING_DELETE'",
+        soci::use(content_hash));
+    statement.execute(false);
+    return statement.get_affected_rows() == 1;
+}
+
+bool ObjectDao::return_to_pending_delete(const std::string& content_hash) {
+    soci::statement statement = (sql_.prepare
+        << "UPDATE objects SET state = 'PENDING_DELETE' "
+           "WHERE content_hash = :hash AND ref_count = 0 AND state = 'RECLAIMING'",
+        soci::use(content_hash));
+    statement.execute(false);
+    return statement.get_affected_rows() == 1;
+}
+
 bool ObjectDao::find(const std::string& content_hash, Object& out_object) {
     soci::indicator result_ind;
 
