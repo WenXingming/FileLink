@@ -147,3 +147,32 @@ TEST_F(AuthServiceTest, RejectsMalformedExpiredAndDisabledSessions) {
     EXPECT_EQ(auth.current_user(disabled_session.session_token, user),
         filelink::CurrentUserResult::InvalidSession);
 }
+
+TEST_F(AuthServiceTest, LogsOutByDeletingOnlyTheSpecifiedSession) {
+    filelink::AuthService auth(pool_);
+    filelink::AuthenticatedSession registration;
+    ASSERT_EQ(auth.register_user("alice", "correct-password", registration),
+        filelink::RegisterResult::Success);
+
+    filelink::AuthenticatedSession login;
+    ASSERT_EQ(auth.login_user("alice", "correct-password", login),
+        filelink::LoginResult::Success);
+
+    ASSERT_EQ(auth.logout(login.session_token), filelink::LogoutResult::Success);
+    filelink::AuthenticatedUser user;
+    EXPECT_EQ(auth.current_user(login.session_token, user),
+        filelink::CurrentUserResult::InvalidSession);
+    EXPECT_EQ(auth.current_user(registration.session_token, user),
+        filelink::CurrentUserResult::Success);
+}
+
+TEST_F(AuthServiceTest, LogoutIsIdempotentAndRejectsMalformedToken) {
+    filelink::AuthService auth(pool_);
+    filelink::AuthenticatedSession session;
+    ASSERT_EQ(auth.register_user("alice", "correct-password", session),
+        filelink::RegisterResult::Success);
+
+    EXPECT_EQ(auth.logout(session.session_token), filelink::LogoutResult::Success);
+    EXPECT_EQ(auth.logout(session.session_token), filelink::LogoutResult::Success);
+    EXPECT_EQ(auth.logout("not-a-token"), filelink::LogoutResult::InvalidSession);
+}

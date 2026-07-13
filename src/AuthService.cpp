@@ -197,4 +197,23 @@ CurrentUserResult AuthService::current_user(const std::string& session_token,
     }
 }
 
+LogoutResult AuthService::logout(const std::string& session_token) {
+    if (sodium_init() < 0) {
+        return LogoutResult::SystemError;
+    }
+
+    std::string token;
+    if (!decode_token(session_token, token)) {
+        return LogoutResult::InvalidSession;
+    }
+
+    try {
+        SociSessionLease lease(pool_);
+        db::UserSessionDao(lease.get()).remove(hash_token(token));
+        return LogoutResult::Success;
+    } catch (const std::exception&) {
+        return LogoutResult::SystemError;
+    }
+}
+
 } // namespace filelink

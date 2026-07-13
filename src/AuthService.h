@@ -28,6 +28,12 @@ enum class CurrentUserResult {
     SystemError
 };
 
+enum class LogoutResult {
+    Success,
+    InvalidSession,
+    SystemError
+};
+
 struct AuthenticatedSession {
     std::string user_id;
     std::string username;
@@ -51,6 +57,7 @@ public:
         AuthenticatedSession& out_session);
     CurrentUserResult current_user(const std::string& session_token,
         AuthenticatedUser& out_user);
+    LogoutResult logout(const std::string& session_token);
 
 private:
     soci::connection_pool& pool_;
