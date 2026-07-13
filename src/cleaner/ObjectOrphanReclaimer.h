@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace soci {
 class connection_pool;
@@ -8,13 +9,14 @@ class connection_pool;
 
 namespace filelink {
 
-// ======================================================================
-// ObjectOrphanReclaimer：离线删除没有 objects 记录的孤儿对象文件。
-// ======================================================================
+// ===========================================================================
+// ObjectOrphanReclaimer：扫描或离线删除没有 objects 记录的孤儿对象文件。
+// ===========================================================================
 class ObjectOrphanReclaimer {
 public:
     ObjectOrphanReclaimer(soci::connection_pool& pool, std::string storage_root);
 
+    std::vector<std::string> find_orphaned_object_paths();
     int reclaim_orphaned_objects();
 
 private:

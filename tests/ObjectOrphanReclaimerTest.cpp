@@ -1,7 +1,6 @@
 #include "MySqlTestConfig.h"
 #include "ObjectStore.h"
 #include "cleaner/ObjectOrphanReclaimer.h"
-#include "cleaner/ObjectOrphanScanner.h"
 #include "db/Object.h"
 
 #include <gtest/gtest.h>
@@ -15,7 +14,7 @@
 #include <unistd.h>
 #include <vector>
 
-class ObjectOrphanScannerTest : public testing::Test {
+class ObjectOrphanReclaimerTest : public testing::Test {
 protected:
     void SetUp() override {
         pool_ = std::make_unique<soci::connection_pool>(1);
@@ -55,7 +54,7 @@ protected:
     std::string storage_root_;
 };
 
-TEST_F(ObjectOrphanScannerTest, FindsUnregisteredObjectWithoutDeletingIt) {
+TEST_F(ObjectOrphanReclaimerTest, FindsUnregisteredObjectWithoutDeletingIt) {
     const std::string registered_hash(64, 'a');
     const std::string orphaned_hash(64, 'b');
     const std::string registered_content_hash(32, static_cast<char>(0xaa));
@@ -79,15 +78,15 @@ TEST_F(ObjectOrphanScannerTest, FindsUnregisteredObjectWithoutDeletingIt) {
         objects.add_reference(registered_content_hash, 16);
     }
 
-    filelink::ObjectOrphanScanner scanner(*pool_, storage_root_);
-    const std::vector<std::string> paths = scanner.find_orphaned_object_paths();
+    filelink::ObjectOrphanReclaimer reclaimer(*pool_, storage_root_);
+    const std::vector<std::string> paths = reclaimer.find_orphaned_object_paths();
 
     EXPECT_EQ(paths, std::vector<std::string>{ orphaned_path });
     EXPECT_EQ(::access(registered_path.c_str(), F_OK), 0);
     EXPECT_EQ(::access(orphaned_path.c_str(), F_OK), 0);
 }
 
-TEST_F(ObjectOrphanScannerTest, ReclaimsUnregisteredObject) {
+TEST_F(ObjectOrphanReclaimerTest, ReclaimsUnregisteredObject) {
     const std::string orphaned_hash(64, 'b');
     const std::string orphaned_temp_path = storage_root_ + "/orphaned.tmp";
 

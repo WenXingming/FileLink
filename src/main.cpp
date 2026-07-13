@@ -11,7 +11,6 @@
 #include "uploads/UploadService.h"
 #include "cleaner/UploadSessionCleaner.h"
 #include "cleaner/ObjectOrphanReclaimer.h"
-#include "cleaner/ObjectOrphanScanner.h"
 #include "cleaner/ObjectReclaimer.h"
 #include "cleaner/DedupRunner.h"
 #include "tudou/http/HttpServer.h"
@@ -68,8 +67,8 @@ int main(int argc, char* argv[]) {
         }
 
         if (config.scanOrphanedObjectsOnly) {
-            filelink::ObjectOrphanScanner scanner(mysqlPool, config.storageRoot);
-            const std::vector<std::string> paths = scanner.find_orphaned_object_paths();
+            filelink::ObjectOrphanReclaimer reclaimer(mysqlPool, config.storageRoot);
+            const std::vector<std::string> paths = reclaimer.find_orphaned_object_paths();
             for (const std::string& path : paths) {
                 std::cout << path << '\n';
             }
