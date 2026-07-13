@@ -28,6 +28,13 @@ enum class UploadChunkResult {
     SystemError
 };
 
+enum class UploadTerminationResult {
+    Terminated,
+    SessionNotFound,
+    Finalizing,
+    SystemError
+};
+
 namespace db {
 struct UploadSession;
 }
@@ -84,9 +91,10 @@ public:
     /**
      * @brief 主动终止上传会话，擦除临时文件和缓存，置为 ABORTED 状态
      * @param uploadIdHex 16进制的会话ID
-     * @return 是否成功终止
+     * @return 终止结果
      */
-    bool terminate_session(const std::string& ownerUserId, const std::string& uploadIdHex);
+    UploadTerminationResult terminate_session(const std::string& ownerUserId,
+        const std::string& uploadIdHex);
 
 private:
     void finalize_session(std::string uploadIdHex, std::string realHashHex = "");
@@ -99,7 +107,7 @@ private:
     bool compute_file_hash(const std::string& partPath, std::string& out_hashHex);
     bool verify_expected_hash(const std::string& uploadIdBinary, const std::string& realHashHex);
     bool commit_to_object_store(const std::string& partPath, const std::string& realHashHex);
-    void mark_session_completed(const std::string& uploadIdBinary, const std::string& realHashHex);
+    bool complete_published_session(const std::string& uploadIdBinary, const std::string& realHashHex);
     void mark_session_failed(const std::string& uploadIdBinary, const std::string& errorMsg);
 
     // Utility helpers

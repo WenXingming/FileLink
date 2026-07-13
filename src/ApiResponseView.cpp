@@ -128,6 +128,16 @@ HttpResponse ApiResponseView::tus_session_status(const db::UploadSession& sessio
         contentHashHex = ss.str();
     }
 
+    std::string completedFileIdHex;
+    if (session.has_completed_file_id) {
+        std::stringstream ss;
+        ss << std::hex << std::setfill('0');
+        for (unsigned char c : session.completed_file_id) {
+            ss << std::setw(2) << static_cast<int>(c);
+        }
+        completedFileIdHex = ss.str();
+    }
+
     std::string body = "{";
     body += R"("upload_id":")" + uploadIdHex + R"(",)";
     body += R"("state":")" + session.state + R"(",)";
@@ -136,6 +146,9 @@ HttpResponse ApiResponseView::tus_session_status(const db::UploadSession& sessio
     body += R"("committed_offset":)" + std::to_string(session.committed_offset);
     if (session.has_content_hash) {
         body += R"(,"content_hash":")" + contentHashHex + R"(")";
+    }
+    if (session.has_completed_file_id) {
+        body += R"(,"file_id":")" + completedFileIdHex + R"(")";
     }
     if (session.has_failure_reason) {
         body += R"(,"failure_reason":")" + escape_json(session.failure_reason) + R"(")";

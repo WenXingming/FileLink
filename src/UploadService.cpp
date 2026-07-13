@@ -1,4 +1,6 @@
 #include "UploadService.h"
+#include "db/File.h"
+#include "db/Object.h"
 #include "db/UploadSession.h"
 #include <soci/soci.h>
 #include <soci/connection-pool.h>
@@ -181,9 +183,6 @@ bool UploadService::create_session(const std::string& ownerUserId, uint64_t tota
         }
     }
 
-    SociSessionLease lease(pool_);
-    db::UploadSessionDao sessionStore(lease.get());
-
     db::UploadSession session;
     session.upload_id = uploadIdBinary;
     session.owner_user_id = ownerUserId;
@@ -191,12 +190,11 @@ bool UploadService::create_session(const std::string& ownerUserId, uint64_t tota
     session.total_size = totalSize;
 
     if (hitDeduplication) {
-        session.state = "COMPLETED";
+        session.state = "FINALIZING";
         session.committed_offset = totalSize;
         session.expected_hash = hashBytes;
         session.has_expected_hash = true;
-        session.content_hash = hashBytes;
-        session.has_content_hash = true;
+        session.has_content_hash = false;
     } else {
         session.state = "UPLOADING";
         session.committed_offset = 0;
@@ -214,7 +212,15 @@ bool UploadService::create_session(const std::string& ownerUserId, uint64_t tota
     std::time_t t = std::time(nullptr) + 86400; // 24 hours
     session.expires_at = *std::localtime(&t);
 
-    sessionStore.create(session);
+    {
+        SociSessionLease lease(pool_);
+        db::UploadSessionDao(lease.get()).create(session);
+    }
+
+    if (hitDeduplication && !complete_published_session(uploadIdBinary, expectedHash)) {
+        mark_session_failed(uploadIdBinary, "Failed to create logical file");
+        return false;
+    }
     return true;
 }
 
@@ -321,7 +327,8 @@ UploadChunkResult UploadService::write_session_chunk(const std::string& ownerUse
     }
 }
 
-bool UploadService::terminate_session(const std::string& ownerUserId, const std::string& uploadIdHex) {
+UploadTerminationResult UploadService::terminate_session(const std::string& ownerUserId,
+    const std::string& uploadIdHex) {
     std::string uploadIdBinary = parse_upload_id_to_binary(uploadIdHex);
     
     try {
@@ -331,11 +338,14 @@ bool UploadService::terminate_session(const std::string& ownerUserId, const std:
         db::UploadSessionDao sessionStore(sql);
         db::UploadSession session;
         if (!sessionStore.find(uploadIdBinary, session) || session.owner_user_id != ownerUserId) {
-            return false;
+            return UploadTerminationResult::SessionNotFound;
         }
 
-        if (session.state != "UPLOADING" && session.state != "FINALIZING") {
-            return false;
+        if (session.state == "FINALIZING") {
+            return UploadTerminationResult::Finalizing;
+        }
+        if (session.state != "UPLOADING") {
+            return UploadTerminationResult::SessionNotFound;
         }
 
         // 1. Erase from active hashers map
@@ -356,9 +366,9 @@ bool UploadService::terminate_session(const std::string& ownerUserId, const std:
         sessionStore.update_state(uploadIdBinary, "ABORTED");
         tr.commit();
 
-        return true;
+        return UploadTerminationResult::Terminated;
     } catch (...) {
-        return false;
+        return UploadTerminationResult::SystemError;
     }
 }
 
@@ -386,8 +396,10 @@ void UploadService::finalize_session(std::string uploadIdHex, std::string realHa
         return;
     }
 
-    // 4. Update completed state in db
-    mark_session_completed(uploadIdBinary, realHashHex);
+    // 4. Create the logical file and complete the session in one transaction.
+    if (!complete_published_session(uploadIdBinary, realHashHex)) {
+        mark_session_failed(uploadIdBinary, "Failed to create logical file");
+    }
 }
 
 // Atomic helpers for chunk write flow
@@ -517,13 +529,36 @@ bool UploadService::commit_to_object_store(const std::string& partPath, const st
     }
 }
 
-void UploadService::mark_session_completed(const std::string& uploadIdBinary, const std::string& realHashHex) {
+bool UploadService::complete_published_session(const std::string& uploadIdBinary,
+    const std::string& realHashHex) {
     try {
         SociSessionLease lease(pool_);
-        db::UploadSessionDao sessionStore(lease.get());
-        std::string hashBytes = hex_to_bytes(realHashHex);
+        soci::session& sql = lease.get();
+        soci::transaction transaction(sql);
+
+        db::UploadSessionDao sessionStore(sql);
+        db::UploadSession session;
+        if (!sessionStore.find(uploadIdBinary, session) || session.state != "FINALIZING") {
+            return false;
+        }
+
+        const std::string hashBytes = hex_to_bytes(realHashHex);
+        db::ObjectDao(sql).add_reference(hashBytes, session.total_size);
+
+        db::File file;
+        file.file_id = generate_random_uuid_binary();
+        file.owner_user_id = session.owner_user_id;
+        file.content_hash = hashBytes;
+        file.display_name = session.file_name;
+        db::FileDao(sql).create(file);
+
         sessionStore.update_completed(uploadIdBinary, hashBytes);
-    } catch (...) {}
+        sessionStore.set_completed_file(uploadIdBinary, file.file_id);
+        transaction.commit();
+        return true;
+    } catch (...) {
+        return false;
+    }
 }
 
 void UploadService::mark_session_failed(const std::string& uploadIdBinary, const std::string& errorMsg) {

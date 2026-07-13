@@ -390,8 +390,17 @@ void ApiRouter::handle_tus_terminate(const HttpRequest& req, HttpResponse& respo
     std::string uploadIdRaw = path.substr(prefix.size());
 
     try {
-        if (!uploadService_.terminate_session(user.user_id, uploadIdRaw)) {
+        const UploadTerminationResult result = uploadService_.terminate_session(user.user_id, uploadIdRaw);
+        if (result == UploadTerminationResult::Finalizing) {
+            response = ApiResponseView::tus_error(409, "Conflict", "Upload Is Finalizing");
+            return;
+        }
+        if (result == UploadTerminationResult::SessionNotFound) {
             response = ApiResponseView::tus_error(404, "Not Found", "Upload Session Not Found or Cannot Be Terminated");
+            return;
+        }
+        if (result == UploadTerminationResult::SystemError) {
+            response = ApiResponseView::tus_error(500, "Internal Server Error", "Failed to Terminate Upload");
             return;
         }
 

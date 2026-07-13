@@ -9,6 +9,8 @@
 #include "tudou/http/HttpRequest.h"
 #include "tudou/http/HttpResponse.h"
 #include "db/UploadSession.h"
+#include "db/File.h"
+#include "db/Object.h"
 #include <soci/soci.h>
 #include <soci/connection-pool.h>
 #include <soci/mysql/soci-mysql.h>
@@ -76,6 +78,8 @@ protected:
             {
                 soci::session sql(*pool);
                 sql << "DELETE FROM upload_sessions";
+                sql << "DELETE FROM files";
+                sql << "DELETE FROM objects";
                 sql << "DELETE FROM user_sessions";
                 sql << "DELETE FROM users";
             }
@@ -100,6 +104,8 @@ protected:
         try {
             soci::session sql(*pool);
             sql << "DELETE FROM upload_sessions";
+            sql << "DELETE FROM files";
+            sql << "DELETE FROM objects";
             sql << "DELETE FROM user_sessions";
             sql << "DELETE FROM users";
         }
@@ -417,6 +423,7 @@ TEST_F(TusDatabaseApiTest, PatchUploadsSequenceSuccessfully) {
     HttpResponse getResp;
     bool completed = false;
     std::string contentHashHex;
+    std::string fileIdHex;
     for (int i = 0; i < 20; ++i) {
         getResp = HttpResponse();
         call_handle_tus_get_session(router, getReq, getResp);
@@ -428,6 +435,10 @@ TEST_F(TusDatabaseApiTest, PatchUploadsSequenceSuccessfully) {
                 if (pos != std::string::npos) {
                     contentHashHex = body.substr(pos + 16, 64);
                 }
+                pos = body.find(R"("file_id":")");
+                if (pos != std::string::npos) {
+                    fileIdHex = body.substr(pos + 11, 32);
+                }
                 break;
             }
         }
@@ -436,12 +447,25 @@ TEST_F(TusDatabaseApiTest, PatchUploadsSequenceSuccessfully) {
 
     ASSERT_TRUE(completed);
     ASSERT_EQ(contentHashHex.size(), 64);
+    ASSERT_EQ(fileIdHex.size(), 32);
 
     std::string objectPath = downloadService.get_object_path(contentHashHex);
     std::ifstream ifs(objectPath, std::ios::binary);
     ASSERT_TRUE(ifs.is_open());
     std::string objectContent((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
     EXPECT_EQ(objectContent, "Hello World! (18 bytes)_");
+
+    {
+        soci::session sql(*pool);
+        std::vector<File> files;
+        FileDao(sql).find_by_owner(ownerSession.user_id, files);
+        ASSERT_EQ(files.size(), 1u);
+        EXPECT_EQ(files[0].display_name, "test_patch.bin");
+
+        Object object;
+        ASSERT_TRUE(ObjectDao(sql).find(files[0].content_hash, object));
+        EXPECT_EQ(object.ref_count, 1u);
+    }
 
     ::unlink(objectPath.c_str());
 }
@@ -556,6 +580,19 @@ std::string base64_encode_test(const std::string& in) {
     while (out.size() % 4) out.push_back('=');
     return out;
 }
+
+std::string hex_to_bytes_test(const std::string& hex) {
+    std::string bytes;
+    bytes.reserve(hex.size() / 2);
+    for (std::size_t index = 0; index < hex.size(); index += 2) {
+        const char high = hex[index];
+        const char low = hex[index + 1];
+        const int upper = high >= 'a' ? high - 'a' + 10 : high - '0';
+        const int lower = low >= 'a' ? low - 'a' + 10 : low - '0';
+        bytes.push_back(static_cast<char>((upper << 4) | lower));
+    }
+    return bytes;
+}
 }
 
 TEST_F(TusDatabaseApiTest, PostDeduplicationInstantlyCompletes) {
@@ -629,6 +666,23 @@ TEST_F(TusDatabaseApiTest, PostDeduplicationInstantlyCompletes) {
     EXPECT_EQ(getResp.get_status_code(), 200);
     std::string body = getResp.get_body();
     EXPECT_NE(body.find(R"("state":"COMPLETED")"), std::string::npos);
+
+    HttpResponse second_post_response;
+    call_handle_tus_create(router, postReq, second_post_response);
+    ASSERT_EQ(second_post_response.get_status_code(), 201);
+
+    // 5. The completed upload owns a logical file and references the object.
+    {
+        soci::session sql(*pool);
+        std::vector<File> files;
+        FileDao(sql).find_by_owner(ownerSession.user_id, files);
+        ASSERT_EQ(files.size(), 2u);
+        EXPECT_EQ(files[0].content_hash, hex_to_bytes_test(expectedHash));
+
+        Object object;
+        ASSERT_TRUE(ObjectDao(sql).find(files[0].content_hash, object));
+        EXPECT_EQ(object.ref_count, 2u);
+    }
 
     // Clean up published object
     ::unlink(result.objectPath.c_str());
@@ -711,6 +765,41 @@ TEST_F(TusDatabaseApiTest, DeleteUploadInstantlyFreesResources) {
     HttpResponse deleteResp2;
     call_handle_tus_terminate(router, deleteReq, deleteResp2);
     EXPECT_EQ(deleteResp2.get_status_code(), 404);
+}
+
+TEST_F(TusDatabaseApiTest, DeleteRejectsFinalizingUpload) {
+    HttpServer server("127.0.0.1", 9999);
+    ObjectStore objectStore("./storage_test");
+    DownloadService downloadService(objectStore);
+    StaticFileService staticFileService("./web");
+    UploadService uploadService(*pool, "./storage_test", objectStore);
+    ApiRouter router(server, downloadService, staticFileService, uploadService, *requestAuthenticator);
+
+    HttpRequest post_request;
+    post_request.set_method("POST");
+    post_request.set_path("/uploads");
+    authenticate(post_request);
+    post_request.add_header("Upload-Length", "10");
+
+    HttpResponse post_response;
+    call_handle_tus_create(router, post_request, post_response);
+    ASSERT_EQ(post_response.get_status_code(), 201);
+
+    {
+        soci::session sql(*pool);
+        sql << "UPDATE upload_sessions SET state = 'FINALIZING' WHERE owner_user_id = :owner",
+            soci::use(ownerSession.user_id);
+    }
+
+    const std::string location = post_response.get_headers().at("Location");
+    const std::string upload_id = location.substr(location.find_last_of('/') + 1);
+    HttpRequest delete_request;
+    delete_request.set_method("DELETE");
+    delete_request.set_path("/uploads/" + upload_id);
+
+    HttpResponse delete_response;
+    call_handle_tus_terminate(router, delete_request, delete_response);
+    EXPECT_EQ(delete_response.get_status_code(), 409);
 }
 
 TEST_F(TusDatabaseApiTest, PostDeduplicationRejectsIncorrectSize) {
