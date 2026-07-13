@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include "MySqlTestConfig.h"
 #include "db/UploadSession.h"
+#include "db/File.h"
+#include "db/Object.h"
 #include "db/User.h"
 #include "cleaner/SessionCleaner.h"
 #include <soci/soci.h>
@@ -20,6 +22,8 @@ protected:
         try {
             sql.open(soci::mysql, filelink::test::mysql_connection_string());
             sql << "DELETE FROM upload_sessions";
+            sql << "DELETE FROM files";
+            sql << "DELETE FROM objects";
             sql << "DELETE FROM user_sessions";
             sql << "DELETE FROM users";
 
@@ -40,6 +44,8 @@ protected:
         }
         try {
             sql << "DELETE FROM upload_sessions";
+            sql << "DELETE FROM files";
+            sql << "DELETE FROM objects";
             sql << "DELETE FROM user_sessions";
             sql << "DELETE FROM users";
             sql.close();
@@ -90,7 +96,37 @@ TEST_F(UploadSessionDaoTest, CreateAndFindSession) {
     EXPECT_EQ(found.expected_hash, "abcdef1234567890abcdef1234567890");
 
     EXPECT_FALSE(found.has_content_hash);
+    EXPECT_FALSE(found.has_completed_file_id);
     EXPECT_FALSE(found.has_failure_reason);
+}
+
+TEST_F(UploadSessionDaoTest, StoresCompletedLogicalFile) {
+    const std::string content_hash = "abcdef1234567890abcdef1234567890";
+    const std::string file_id = "completed-file01";
+    ObjectDao(sql).add_reference(content_hash, 42);
+    FileDao(sql).create({file_id, owner_user_id_, content_hash, "completed.txt", {}});
+
+    UploadSessionDao store(sql);
+    UploadSession session;
+    session.upload_id = "1234567890123456";
+    session.owner_user_id = owner_user_id_;
+    session.state = "UPLOADING";
+    session.file_name = "completed.txt";
+    session.total_size = 42;
+    const std::time_t now = std::time(nullptr);
+    session.expires_at = *std::localtime(&now);
+    store.create(session);
+
+    store.update_completed(session.upload_id, content_hash);
+    store.set_completed_file(session.upload_id, file_id);
+
+    UploadSession found;
+    ASSERT_TRUE(store.find(session.upload_id, found));
+    EXPECT_EQ(found.state, "COMPLETED");
+    ASSERT_TRUE(found.has_content_hash);
+    EXPECT_EQ(found.content_hash, content_hash);
+    ASSERT_TRUE(found.has_completed_file_id);
+    EXPECT_EQ(found.completed_file_id, file_id);
 }
 
 TEST_F(UploadSessionDaoTest, CannotCreateWithOffsetGreaterThanTotalSize) {

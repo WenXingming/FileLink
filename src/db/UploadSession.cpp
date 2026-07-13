@@ -27,11 +27,12 @@ void UploadSessionDao::create(const UploadSession& session) {
 bool UploadSessionDao::find(const std::string& upload_id, UploadSession& session) {
     soci::indicator expected_hash_ind;
     soci::indicator content_hash_ind;
+    soci::indicator completed_file_id_ind;
     soci::indicator failure_reason_ind;
     soci::indicator result_ind;
 
     sql_ << "SELECT upload_id, owner_user_id, state, file_name, total_size, committed_offset, "
-            "expected_hash, content_hash, failure_reason, created_at, updated_at, expires_at "
+            "expected_hash, content_hash, completed_file_id, failure_reason, created_at, updated_at, expires_at "
             "FROM upload_sessions WHERE upload_id = :id",
             soci::into(session.upload_id, result_ind),
             soci::into(session.owner_user_id),
@@ -41,6 +42,7 @@ bool UploadSessionDao::find(const std::string& upload_id, UploadSession& session
             soci::into(session.committed_offset),
             soci::into(session.expected_hash, expected_hash_ind),
             soci::into(session.content_hash, content_hash_ind),
+            soci::into(session.completed_file_id, completed_file_id_ind),
             soci::into(session.failure_reason, failure_reason_ind),
             soci::into(session.created_at),
             soci::into(session.updated_at),
@@ -53,6 +55,7 @@ bool UploadSessionDao::find(const std::string& upload_id, UploadSession& session
 
     session.has_expected_hash = (expected_hash_ind == soci::i_ok);
     session.has_content_hash = (content_hash_ind == soci::i_ok);
+    session.has_completed_file_id = (completed_file_id_ind == soci::i_ok);
     session.has_failure_reason = (failure_reason_ind == soci::i_ok);
 
     return true;
@@ -73,6 +76,13 @@ void UploadSessionDao::update_state(const std::string& upload_id, const std::str
 void UploadSessionDao::update_completed(const std::string& upload_id, const std::string& content_hash) {
     sql_ << "UPDATE upload_sessions SET state = 'COMPLETED', content_hash = :hash WHERE upload_id = :id",
             soci::use(content_hash),
+            soci::use(upload_id);
+}
+
+void UploadSessionDao::set_completed_file(const std::string& upload_id,
+    const std::string& completed_file_id) {
+    sql_ << "UPDATE upload_sessions SET completed_file_id = :file_id WHERE upload_id = :id",
+            soci::use(completed_file_id),
             soci::use(upload_id);
 }
 
