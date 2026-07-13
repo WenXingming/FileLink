@@ -22,6 +22,7 @@ if(FILELINK_BUILD_INTEGRATION_TESTS)
         TusControlApiTest.cpp
         UploadSessionDaoTest.cpp
         UserDaoTest.cpp
+        UserSessionDaoTest.cpp
         DedupRunnerTest.cpp
     )
     target_link_libraries(filelink_integration_tests PRIVATE
