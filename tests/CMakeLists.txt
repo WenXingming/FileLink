@@ -23,6 +23,7 @@ if(FILELINK_BUILD_INTEGRATION_TESTS)
         UploadSessionDaoTest.cpp
         UserDaoTest.cpp
         UserSessionDaoTest.cpp
+        AuthServiceTest.cpp
         DedupRunnerTest.cpp
     )
     target_link_libraries(filelink_integration_tests PRIVATE
