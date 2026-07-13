@@ -549,12 +549,14 @@ TEST_F(TusDatabaseApiTest, DeleteUploadInstantlyFreesResources) {
         uuidBinary.push_back(static_cast<char>((h << 4) | l));
     }
 
-    soci::session sql(*pool);
-    UploadSessionDao store(sql);
-    UploadSession session;
-    bool found = store.find(uuidBinary, session);
-    ASSERT_TRUE(found);
-    EXPECT_EQ(session.state, "ABORTED");
+    {
+        soci::session sql(*pool);
+        UploadSessionDao store(sql);
+        UploadSession session;
+        bool found = store.find(uuidBinary, session);
+        ASSERT_TRUE(found);
+        EXPECT_EQ(session.state, "ABORTED");
+    }
 
     // 6. Retry DELETE: expect 404 since it's already aborted
     HttpResponse deleteResp2;

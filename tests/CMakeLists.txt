@@ -4,6 +4,7 @@ if(FILELINK_BUILD_TESTS)
     add_executable(filelink_unit_tests
         AppConfigTests.cpp
         ObjectStoreTests.cpp
+        PasswordHasherTests.cpp
     )
     target_link_libraries(filelink_unit_tests PRIVATE
         filelink_lib
