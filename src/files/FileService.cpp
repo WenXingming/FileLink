@@ -1,9 +1,12 @@
 #include "FileService.h"
 
+#include "db/Object.h"
+
 #include <soci/connection-pool.h>
 
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 
 namespace filelink {
 
@@ -32,6 +35,27 @@ bool FileService::find_file(const std::string& owner_user_id, const std::string&
     db::File& out_file) {
     SociSessionLease lease(pool_);
     return db::FileDao(lease.get()).find_by_id_and_owner(file_id, owner_user_id, out_file);
+}
+
+bool FileService::delete_file(const std::string& owner_user_id, const std::string& file_id) {
+    SociSessionLease lease(pool_);
+    soci::session& sql = lease.get();
+    soci::transaction transaction(sql);
+
+    db::File file;
+    db::FileDao file_dao(sql);
+    if (!file_dao.find_by_id_and_owner(file_id, owner_user_id, file)) {
+        return false;
+    }
+    if (!file_dao.remove_by_id_and_owner(file_id, owner_user_id)) {
+        return false;
+    }
+    if (!db::ObjectDao(sql).remove_reference(file.content_hash)) {
+        throw std::runtime_error("logical file references a missing object");
+    }
+
+    transaction.commit();
+    return true;
 }
 
 std::string FileService::object_path(const db::File& file) const {

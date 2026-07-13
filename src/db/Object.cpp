@@ -11,6 +11,17 @@ void ObjectDao::add_reference(const std::string& content_hash, uint64_t byte_siz
             soci::use(byte_size);
 }
 
+bool ObjectDao::remove_reference(const std::string& content_hash) {
+    soci::statement statement = (sql_.prepare
+        << "UPDATE objects "
+           "SET state = CASE WHEN ref_count = 1 THEN 'PENDING_DELETE' ELSE state END, "
+               "ref_count = ref_count - 1 "
+           "WHERE content_hash = :hash AND ref_count > 0",
+        soci::use(content_hash));
+    statement.execute(false);
+    return statement.get_affected_rows() == 1;
+}
+
 bool ObjectDao::find(const std::string& content_hash, Object& out_object) {
     soci::indicator result_ind;
 

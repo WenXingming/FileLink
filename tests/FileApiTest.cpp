@@ -66,6 +66,18 @@ protected:
         return response;
     }
 
+    HttpResponse delete_file(FileApiRouter& router, const std::string& file_id,
+        const std::string& token) {
+        HttpRequest request;
+        request.set_method("DELETE");
+        request.set_path("/files/" + file_id);
+        request.add_header("Cookie", "filelink_session=" + token);
+
+        HttpResponse response;
+        router.handle_delete(request, response);
+        return response;
+    }
+
     soci::connection_pool pool_{1};
 };
 
@@ -150,6 +162,56 @@ TEST_F(FileApiTest, DownloadsOnlyOwnersFileWithFileBody) {
     EXPECT_EQ(forbidden_response.get_status_code(), 404);
 
     ::unlink(commit.objectPath.c_str());
+}
+
+TEST_F(FileApiTest, DeletesOnlyOwnersFileAndMarksLastObjectReferencePending) {
+    AuthService auth_service(pool_);
+    AuthenticatedSession alice;
+    AuthenticatedSession bob;
+    ASSERT_EQ(auth_service.register_user("alice", "correct-password", alice), RegisterResult::Success);
+    ASSERT_EQ(auth_service.register_user("bob", "correct-password", bob), RegisterResult::Success);
+
+    const std::string content_hash = "12345678901234567890123456789012";
+    const std::string alice_file_id = "alice-file-id001";
+    const std::string bob_file_id = "bob-file-id00001";
+    {
+        soci::session sql(pool_);
+        db::ObjectDao(sql).add_reference(content_hash, 10);
+        db::ObjectDao(sql).add_reference(content_hash, 10);
+        db::FileDao(sql).create({alice_file_id, alice.user_id, content_hash, "alice.txt", {}});
+        db::FileDao(sql).create({bob_file_id, bob.user_id, content_hash, "bob.txt", {}});
+    }
+
+    HttpServer server("127.0.0.1", 9999);
+    RequestAuthenticator request_authenticator(auth_service);
+    FileService file_service(pool_, ObjectStore("./storage_test"));
+    FileApiRouter router(server, file_service, request_authenticator);
+
+    const std::string alice_file_id_hex = "616c6963652d66696c652d6964303031";
+    const std::string bob_file_id_hex = "626f622d66696c652d69643030303031";
+    EXPECT_EQ(delete_file(router, alice_file_id_hex, "").get_status_code(), 401);
+    EXPECT_EQ(delete_file(router, bob_file_id_hex, alice.session_token).get_status_code(), 404);
+    EXPECT_EQ(delete_file(router, alice_file_id_hex, alice.session_token).get_status_code(), 204);
+
+    {
+        soci::session sql(pool_);
+        db::File file;
+        EXPECT_FALSE(db::FileDao(sql).find_by_id_and_owner(alice_file_id, alice.user_id, file));
+
+        db::Object object;
+        ASSERT_TRUE(db::ObjectDao(sql).find(content_hash, object));
+        EXPECT_EQ(object.ref_count, 1u);
+        EXPECT_EQ(object.state, "READY");
+    }
+
+    EXPECT_EQ(delete_file(router, bob_file_id_hex, bob.session_token).get_status_code(), 204);
+    {
+        soci::session sql(pool_);
+        db::Object object;
+        ASSERT_TRUE(db::ObjectDao(sql).find(content_hash, object));
+        EXPECT_EQ(object.ref_count, 0u);
+        EXPECT_EQ(object.state, "PENDING_DELETE");
+    }
 }
 
 } // namespace filelink

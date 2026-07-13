@@ -23,6 +23,7 @@ public:
 private:
     void handle_list_files(const HttpRequest& request, HttpResponse& response);
     void handle_download(const HttpRequest& request, HttpResponse& response);
+    void handle_delete(const HttpRequest& request, HttpResponse& response);
 
     HttpServer& server_;
     FileService& file_service_;

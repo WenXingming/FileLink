@@ -78,8 +78,8 @@
                     <div class="line"><span class="cmd-prompt">$</span> curl -T my_large_dataset.zip http://filelink.dev/uploads</div>
                     <div class="line-comment"># 计算 Blake3 哈希进行秒传探测 (Checking hash)...</div>
                     <div class="line-success">Instant Upload Success! File deduped on server.</div>
-                    <div class="line"><span class="cmd-prompt">$</span> echo "Share Link:"</div>
-                    <div class="line-link">http://filelink.dev/objects/d74981efa70...</div>
+                    <div class="line"><span class="cmd-prompt">$</span> echo "Private download:"</div>
+                    <div class="line-link">http://filelink.dev/files/&lt;file_id&gt;/download</div>
                 </div>
             </div>
         </section>
@@ -241,7 +241,7 @@
                                 </span>
                                 <span>文件上传成功</span>
                             </div>
-                            <div style="margin-bottom: 8px; color: var(--text-secondary); font-size: 0.88rem; font-weight: 500;">分享链接:</div>
+                            <div style="margin-bottom: 8px; color: var(--text-secondary); font-size: 0.88rem; font-weight: 500;">私有下载地址:</div>
                             <div class="share-link-container">
                                 <a href="#" target="_blank" class="share-link" id="shareLink"></a>
                                 <button class="copy-btn-small" id="copyButton" type="button">复制</button>
@@ -250,20 +250,18 @@
                     </div>
                 </div>
 
-                <!-- Panel 2: Files History List -->
+                <!-- Panel 2: Private Files List -->
                 <div class="panel-container" id="panelFiles">
                     <div class="dashboard-card files-card">
                         <div class="card-header">
-                            <h2>本地上传文件记录</h2>
-                            <button class="clear-history-btn" id="clearHistoryBtn">清除历史</button>
+                            <h2>我的文件</h2>
+                            <button class="clear-history-btn" id="refreshFilesBtn">刷新</button>
                         </div>
                         <div class="files-table-container">
                             <table class="files-table">
                                 <thead>
                                     <tr>
                                         <th>文件名</th>
-                                        <th>大小</th>
-                                        <th>上传时间</th>
                                         <th>操作</th>
                                     </tr>
                                 </thead>
@@ -293,11 +291,12 @@
                         </div>
                         
                         <div class="api-section">
-                            <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 10px; color: var(--text-main);">2. 下载已发布对象 (哈希寻址)</h3>
-                            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 8px;">文件内容寻址模式下，可直接通过其 Blake3 哈希值与后缀名拼接下载：</p>
+                            <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 10px; color: var(--text-main);">2. 下载私有文件</h3>
+                            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 8px;">登录后，从“我的文件”中获取文件 ID；下载请求会由浏览器自动携带会话 Cookie：</p>
                             <div class="code-block-wrapper">
-                                <pre><code>curl -O http://127.0.0.1:18081/objects/&lt;blake3_hash&gt;.&lt;ext&gt;</code></pre>
-                                <button class="copy-code-btn" data-code="curl -O http://127.0.0.1:18081/objects/d74981efa70a0c880b8d8c1985d075dbcbf679b99a5f9914e5aaf96b831a9e24.txt">复制</button>
+                                <pre><code>curl -b "filelink_session=&lt;session_token&gt;" -OJ \\
+  http://127.0.0.1:18081/files/&lt;file_id&gt;/download</code></pre>
+                                <button class="copy-code-btn" data-code="curl -b 'filelink_session=&lt;session_token&gt;' -OJ http://127.0.0.1:18081/files/&lt;file_id&gt;/download">复制</button>
                             </div>
                         </div>
                     </div>
@@ -313,8 +312,8 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
             <div class="auth-modal-header">
-                <div class="auth-modal-title">需要登录后上传</div>
-                <div class="auth-modal-subtitle">请使用您的团队凭证进行身份验证</div>
+                <div class="auth-modal-title">登录或创建账户</div>
+                <div class="auth-modal-subtitle">登录后可管理自己的私有文件</div>
             </div>
 
             <div class="auth-body">
@@ -326,6 +325,7 @@
                     <div class="auth-error-message" id="authErrorMessage"></div>
                     <div class="login-actions">
                         <button class="login-btn" id="loginButton" type="button">登录</button>
+                        <button class="logout-btn" id="registerButton" type="button">注册</button>
                         <button class="logout-btn" id="logoutButton" type="button">关闭</button>
                     </div>
                     <div class="login-status" id="loginStatus">

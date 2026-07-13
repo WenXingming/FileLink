@@ -52,6 +52,16 @@ bool hex_decode(const std::string& encoded, std::string& out_bytes) {
     return true;
 }
 
+bool parse_file_id_path(const std::string& path, const std::string& suffix, std::string& out_file_id) {
+    const std::string prefix = "/files/";
+    if (path.size() != prefix.size() + 32 + suffix.size()
+        || path.compare(0, prefix.size(), prefix) != 0
+        || path.compare(path.size() - suffix.size(), suffix.size(), suffix) != 0) {
+        return false;
+    }
+    return hex_decode(path.substr(prefix.size(), 32), out_file_id);
+}
+
 std::string download_name(const std::string& display_name) {
     std::string name;
     for (unsigned char value : display_name) {
@@ -76,23 +86,21 @@ void FileApiRouter::register_routes() {
         handle_list_files(request, response);
     });
     server_.add_prefix_route("/files/", [this](const HttpRequest& request, HttpResponse& response) {
-        handle_download(request, response);
+        if (request.get_method() == "GET") {
+            handle_download(request, response);
+        } else if (request.get_method() == "DELETE") {
+            handle_delete(request, response);
+        } else {
+            response = json_response(404, "Not Found", {{"message", "Not Found"}});
+        }
     });
 }
 
 void FileApiRouter::handle_download(const HttpRequest& request, HttpResponse& response) {
-    const std::string prefix = "/files/";
     const std::string suffix = "/download";
     const std::string path = request.get_path();
-    if (request.get_method() != "GET" || path.size() != prefix.size() + 32 + suffix.size()
-        || path.compare(0, prefix.size(), prefix) != 0
-        || path.compare(path.size() - suffix.size(), suffix.size(), suffix) != 0) {
-        response = json_response(404, "Not Found", {{"message", "Not Found"}});
-        return;
-    }
-
     std::string file_id;
-    if (!hex_decode(path.substr(prefix.size(), 32), file_id)) {
+    if (request.get_method() != "GET" || !parse_file_id_path(path, suffix, file_id)) {
         response = json_response(404, "Not Found", {{"message", "Not Found"}});
         return;
     }
@@ -134,6 +142,36 @@ void FileApiRouter::handle_download(const HttpRequest& request, HttpResponse& re
         response.set_file_body(std::make_shared<ScopedFd>(descriptor), static_cast<size_t>(info.st_size));
     } catch (const std::exception&) {
         response = json_response(500, "Internal Server Error", {{"message", "File download failed"}});
+    }
+}
+
+void FileApiRouter::handle_delete(const HttpRequest& request, HttpResponse& response) {
+    std::string file_id;
+    if (!parse_file_id_path(request.get_path(), "", file_id)) {
+        response = json_response(404, "Not Found", {{"message", "Not Found"}});
+        return;
+    }
+
+    AuthenticatedUser user;
+    switch (request_authenticator_.authenticate(request, user)) {
+    case RequestAuthResult::Authenticated:
+        break;
+    case RequestAuthResult::Unauthorized:
+        response = json_response(401, "Unauthorized", {{"message", "Unauthorized"}});
+        return;
+    case RequestAuthResult::SystemError:
+        response = json_response(500, "Internal Server Error", {{"message", "Authentication failed"}});
+        return;
+    }
+
+    try {
+        if (!file_service_.delete_file(user.user_id, file_id)) {
+            response = json_response(404, "Not Found", {{"message", "Not Found"}});
+            return;
+        }
+        response.set_status(204, "No Content");
+    } catch (const std::exception&) {
+        response = json_response(500, "Internal Server Error", {{"message", "File deletion failed"}});
     }
 }
 

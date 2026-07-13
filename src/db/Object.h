@@ -26,6 +26,7 @@ public:
     explicit ObjectDao(soci::session& sql) : sql_(sql) {}
 
     void add_reference(const std::string& content_hash, uint64_t byte_size);
+    bool remove_reference(const std::string& content_hash);
     bool find(const std::string& content_hash, Object& out_object);
 
 private:
