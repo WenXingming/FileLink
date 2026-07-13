@@ -19,6 +19,7 @@ target_include_directories(filelink_lib PUBLIC
 target_compile_features(filelink_lib PUBLIC cxx_std_14)
 target_link_libraries(filelink_lib PUBLIC
     CLI11::CLI11
+    nlohmann_json::nlohmann_json
     Tudou::tudou
     ${FILELINK_BLAKE3_TARGET}
     dedup_lib

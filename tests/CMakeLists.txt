@@ -24,6 +24,7 @@ if(FILELINK_BUILD_INTEGRATION_TESTS)
         UserDaoTest.cpp
         UserSessionDaoTest.cpp
         AuthServiceTest.cpp
+        AuthApiTest.cpp
         DedupRunnerTest.cpp
     )
     target_link_libraries(filelink_integration_tests PRIVATE
