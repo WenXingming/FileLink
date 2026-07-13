@@ -21,6 +21,7 @@ if(FILELINK_BUILD_INTEGRATION_TESTS)
     add_executable(filelink_integration_tests
         TusControlApiTest.cpp
         UploadSessionDaoTest.cpp
+        ObjectDaoTest.cpp
         UserDaoTest.cpp
         UserSessionDaoTest.cpp
         AuthServiceTest.cpp
