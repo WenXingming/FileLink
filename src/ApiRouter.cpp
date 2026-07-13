@@ -1,6 +1,6 @@
 #include "ApiRouter.h"
 #include "ApiResponseView.h"
-#include "AuthService.h"
+#include "auth/AuthService.h"
 
 #include "tudou/http/HttpRequest.h"
 #include "tudou/http/HttpResponse.h"

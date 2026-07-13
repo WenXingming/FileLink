@@ -1,4 +1,4 @@
-#include "PasswordHasher.h"
+#include "auth/PasswordHasher.h"
 
 #include <gtest/gtest.h>
 

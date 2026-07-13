@@ -1,5 +1,5 @@
-#include "AuthApiRouter.h"
-#include "AuthService.h"
+#include "auth/AuthApiRouter.h"
+#include "auth/AuthService.h"
 #include "MySqlTestConfig.h"
 #include "tudou/http/HttpRequest.h"
 #include "tudou/http/HttpResponse.h"

@@ -5,6 +5,9 @@
 
 namespace filelink {
 
+// =======================================================================
+// AuthApiRouter：注册认证相关 HTTP 路由，并将请求转交给 AuthService。
+// =======================================================================
 class AuthApiRouter {
     friend class AuthApiTest;
 

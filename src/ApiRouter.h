@@ -2,7 +2,7 @@
 
 #include "DownloadService.h"
 #include "StaticFileService.h"
-#include "RequestAuthenticator.h"
+#include "auth/RequestAuthenticator.h"
 #include "tudou/http/HttpServer.h"
 
 #include <atomic>

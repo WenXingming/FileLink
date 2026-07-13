@@ -15,6 +15,9 @@ enum class RequestAuthResult {
     SystemError
 };
 
+// =================================================================
+// RequestAuthenticator：从 Cookie 提取会话令牌，并解析当前认证用户。
+// =================================================================
 class RequestAuthenticator {
 public:
     explicit RequestAuthenticator(AuthService& auth_service) : auth_service_(auth_service) {}

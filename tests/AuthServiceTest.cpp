@@ -1,6 +1,6 @@
-#include "AuthService.h"
+#include "auth/AuthService.h"
 #include "MySqlTestConfig.h"
-#include "PasswordHasher.h"
+#include "auth/PasswordHasher.h"
 #include "db/User.h"
 
 #include <gtest/gtest.h>
