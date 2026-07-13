@@ -105,3 +105,45 @@ TEST_F(AuthServiceTest, RejectsUnknownWrongPasswordAndDisabledUser) {
     EXPECT_EQ(auth.login_user("alice", "correct-password", session),
         filelink::LoginResult::InvalidCredentials);
 }
+
+TEST_F(AuthServiceTest, FindsCurrentUserFromActiveSession) {
+    filelink::AuthService auth(pool_);
+    filelink::AuthenticatedSession session;
+    ASSERT_EQ(auth.register_user("alice", "correct-password", session),
+        filelink::RegisterResult::Success);
+
+    filelink::AuthenticatedUser user;
+    ASSERT_EQ(auth.current_user(session.session_token, user),
+        filelink::CurrentUserResult::Success);
+    EXPECT_EQ(user.user_id, session.user_id);
+    EXPECT_EQ(user.username, "alice");
+}
+
+TEST_F(AuthServiceTest, RejectsMalformedExpiredAndDisabledSessions) {
+    filelink::AuthService auth(pool_);
+    filelink::AuthenticatedSession expired_session;
+    ASSERT_EQ(auth.register_user("alice", "correct-password", expired_session),
+        filelink::RegisterResult::Success);
+
+    filelink::AuthenticatedUser user;
+    EXPECT_EQ(auth.current_user("not-a-token", user), filelink::CurrentUserResult::InvalidSession);
+    {
+        soci::session sql(pool_);
+        sql << "UPDATE user_sessions SET expires_at = DATE_SUB(NOW(), INTERVAL 1 SECOND) "
+               "WHERE user_id = :id",
+            soci::use(expired_session.user_id);
+    }
+    EXPECT_EQ(auth.current_user(expired_session.session_token, user),
+        filelink::CurrentUserResult::InvalidSession);
+
+    filelink::AuthenticatedSession disabled_session;
+    ASSERT_EQ(auth.register_user("bob", "correct-password", disabled_session),
+        filelink::RegisterResult::Success);
+    {
+        soci::session sql(pool_);
+        sql << "UPDATE users SET disabled_at = NOW() WHERE user_id = :id",
+            soci::use(disabled_session.user_id);
+    }
+    EXPECT_EQ(auth.current_user(disabled_session.session_token, user),
+        filelink::CurrentUserResult::InvalidSession);
+}

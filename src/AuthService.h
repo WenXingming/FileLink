@@ -22,10 +22,21 @@ enum class LoginResult {
     SystemError
 };
 
+enum class CurrentUserResult {
+    Success,
+    InvalidSession,
+    SystemError
+};
+
 struct AuthenticatedSession {
     std::string user_id;
     std::string username;
     std::string session_token;
+};
+
+struct AuthenticatedUser {
+    std::string user_id;
+    std::string username;
 };
 
 class AuthService {
@@ -38,6 +49,8 @@ public:
     LoginResult login_user(const std::string& username,
         const std::string& password,
         AuthenticatedSession& out_session);
+    CurrentUserResult current_user(const std::string& session_token,
+        AuthenticatedUser& out_user);
 
 private:
     soci::connection_pool& pool_;

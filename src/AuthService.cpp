@@ -62,6 +62,24 @@ std::string encode_token(const std::string& token) {
     return encoded.data();
 }
 
+bool decode_token(const std::string& encoded, std::string& token) {
+    if (encoded.size() != crypto_generichash_BYTES * 2) {
+        return false;
+    }
+
+    std::array<unsigned char, crypto_generichash_BYTES> decoded{};
+    std::size_t decoded_size = 0;
+    if (sodium_hex2bin(decoded.data(), decoded.size(), encoded.data(), encoded.size(),
+            nullptr, &decoded_size, nullptr)
+        != 0
+        || decoded_size != decoded.size()) {
+        return false;
+    }
+
+    token.assign(reinterpret_cast<const char*>(decoded.data()), decoded.size());
+    return true;
+}
+
 std::tm session_expiry() {
     const std::time_t value = std::time(nullptr) + 7 * 24 * 60 * 60;
     std::tm result{};
@@ -144,6 +162,38 @@ LoginResult AuthService::login_user(const std::string& username,
         return LoginResult::Success;
     } catch (const std::exception&) {
         return LoginResult::SystemError;
+    }
+}
+
+CurrentUserResult AuthService::current_user(const std::string& session_token,
+    AuthenticatedUser& out_user) {
+    if (sodium_init() < 0) {
+        return CurrentUserResult::SystemError;
+    }
+
+    std::string token;
+    if (!decode_token(session_token, token)) {
+        return CurrentUserResult::InvalidSession;
+    }
+
+    try {
+        SociSessionLease lease(pool_);
+        soci::session& sql = lease.get();
+        db::UserSession session;
+        if (!db::UserSessionDao(sql).find_active(hash_token(token), session)) {
+            return CurrentUserResult::InvalidSession;
+        }
+
+        db::User user;
+        if (!db::UserDao(sql).find_by_id(session.user_id, user) || user.is_disabled) {
+            return CurrentUserResult::InvalidSession;
+        }
+
+        out_user.user_id = user.user_id;
+        out_user.username = user.username;
+        return CurrentUserResult::Success;
+    } catch (const std::exception&) {
+        return CurrentUserResult::SystemError;
     }
 }
 
