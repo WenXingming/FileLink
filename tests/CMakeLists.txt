@@ -23,6 +23,7 @@ if(FILELINK_BUILD_INTEGRATION_TESTS)
         UploadSessionDaoTest.cpp
         ObjectDaoTest.cpp
         FileDaoTest.cpp
+        FileApiTest.cpp
         UserDaoTest.cpp
         UserSessionDaoTest.cpp
         AuthServiceTest.cpp
