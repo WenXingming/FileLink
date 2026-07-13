@@ -47,7 +47,8 @@ public:
      * @param out_totalSize 输出总大小
      * @return 是否成功找到会话
      */
-    bool get_session_progress(const std::string& uploadIdHex, uint64_t& out_offset, uint64_t& out_totalSize);
+    bool get_session_progress(const std::string& ownerUserId, const std::string& uploadIdHex,
+        uint64_t& out_offset, uint64_t& out_totalSize);
 
     /**
      * @brief 获取完整会话以查询状态
@@ -55,7 +56,8 @@ public:
      * @param out_session 输出会话模型
      * @return 是否成功找到
      */
-    bool get_session(const std::string& uploadIdHex, db::UploadSession& out_session);
+    bool get_session(const std::string& ownerUserId, const std::string& uploadIdHex,
+        db::UploadSession& out_session);
 
     /**
      * @brief 创建一个新的上传会话
@@ -65,7 +67,8 @@ public:
      * @param out_uploadIdHex 输出生成的16进制会话ID
      * @return 是否成功创建
      */
-    bool create_session(uint64_t totalSize, const std::string& metadataHeader, const std::string& host, std::string& out_uploadIdHex);
+    bool create_session(const std::string& ownerUserId, uint64_t totalSize,
+        const std::string& metadataHeader, const std::string& host, std::string& out_uploadIdHex);
 
     /**
      * @brief 追加写入分片数据并推进偏移量
@@ -75,14 +78,15 @@ public:
      * @param out_newOffset 输出写入后最新的偏移量
      * @return 业务结果枚举 UploadChunkResult
      */
-    UploadChunkResult write_session_chunk(const std::string& uploadIdHex, uint64_t clientOffset, const std::string& chunkData, uint64_t& out_newOffset);
+    UploadChunkResult write_session_chunk(const std::string& ownerUserId, const std::string& uploadIdHex,
+        uint64_t clientOffset, const std::string& chunkData, uint64_t& out_newOffset);
 
     /**
      * @brief 主动终止上传会话，擦除临时文件和缓存，置为 ABORTED 状态
      * @param uploadIdHex 16进制的会话ID
      * @return 是否成功终止
      */
-    bool terminate_session(const std::string& uploadIdHex);
+    bool terminate_session(const std::string& ownerUserId, const std::string& uploadIdHex);
 
 private:
     void finalize_session(std::string uploadIdHex, std::string realHashHex = "");

@@ -40,9 +40,26 @@ for _ in {1..50}; do
 done
 
 test_data="Hello FileLink Download! $$"
-# 1. 上传文件获取 hash (采用 TUS 协议)
+# 1. 注册并取得认证 Cookie
+auth_headers=$(mktemp)
+"$curl" --noproxy "*" -i -X POST \
+    -H "Content-Type: application/json" \
+    -d "{\"username\":\"download_test_${port}\",\"password\":\"correct-password\"}" \
+    --silent --show-error "http://127.0.0.1:${port}/auth/register" > "$auth_headers"
+
+session_cookie=$(awk -F': ' 'tolower($1) == "set-cookie" { sub(/\r$/, "", $2); split($2, parts, ";"); print parts[1]; exit }' "$auth_headers")
+rm -f "$auth_headers"
+
+if [[ -z "$session_cookie" ]]; then
+    echo "Failed to get authentication cookie" >&2
+    exit 1
+fi
+
+# 2. 上传文件获取 hash (采用 TUS 协议)
 resp_headers=$(mktemp)
-"$curl" --noproxy "*" -i -X POST -H "Upload-Length: ${#test_data}" -H "Upload-Metadata: filename ZG93bmxvYWQudHh0" --silent --show-error "http://127.0.0.1:${port}/uploads" > "$resp_headers"
+"$curl" --noproxy "*" -i -X POST -H "Cookie: $session_cookie" \
+    -H "Upload-Length: ${#test_data}" -H "Upload-Metadata: filename ZG93bmxvYWQudHh0" \
+    --silent --show-error "http://127.0.0.1:${port}/uploads" > "$resp_headers"
 
 location=$(grep -i "Location:" "$resp_headers" | awk '{print $2}' | tr -d '\r\n')
 rm -f "$resp_headers"
@@ -53,14 +70,16 @@ if [[ -z "$location" ]]; then
 fi
 
 # PATCH 上传分片数据
-patch_resp="$("$curl" --noproxy "*" -i -X PATCH -H "Content-Type: application/offset+octet-stream" -H "Upload-Offset: 0" -d "$test_data" --silent --show-error "$location")"
+patch_resp="$("$curl" --noproxy "*" -i -X PATCH -H "Cookie: $session_cookie" \
+    -H "Content-Type: application/offset+octet-stream" -H "Upload-Offset: 0" \
+    -d "$test_data" --silent --show-error "$location")"
 
 # 轮询获取会话状态，提取最终哈希值
 completed=false
 hash=""
 
 for _ in {1..50}; do
-    get_resp="$("$curl" --noproxy "*" --silent --show-error "$location")"
+    get_resp="$("$curl" --noproxy "*" -H "Cookie: $session_cookie" --silent --show-error "$location")"
     if [[ "$get_resp" == *"\"state\":\"COMPLETED\""* ]]; then
         completed=true
         hash=$(echo "$get_resp" | grep -o '"content_hash":"[^"]*' | cut -d'"' -f4 || true)

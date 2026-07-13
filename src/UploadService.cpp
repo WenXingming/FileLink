@@ -111,13 +111,14 @@ UploadService::UploadService(soci::connection_pool& pool, std::string storageRoo
     : pool_(pool), storageRoot_(std::move(storageRoot)), store_(std::move(store)) {
 }
 
-bool UploadService::get_session_progress(const std::string& uploadIdHex, uint64_t& out_offset, uint64_t& out_totalSize) {
+bool UploadService::get_session_progress(const std::string& ownerUserId, const std::string& uploadIdHex,
+    uint64_t& out_offset, uint64_t& out_totalSize) {
     std::string uploadIdBinary = parse_upload_id_to_binary(uploadIdHex);
     
     SociSessionLease lease(pool_);
     db::UploadSessionDao sessionStore(lease.get());
     db::UploadSession session;
-    if (!sessionStore.find(uploadIdBinary, session)) {
+    if (!sessionStore.find(uploadIdBinary, session) || session.owner_user_id != ownerUserId) {
         return false;
     }
     
@@ -126,15 +127,17 @@ bool UploadService::get_session_progress(const std::string& uploadIdHex, uint64_
     return true;
 }
 
-bool UploadService::get_session(const std::string& uploadIdHex, db::UploadSession& out_session) {
+bool UploadService::get_session(const std::string& ownerUserId, const std::string& uploadIdHex,
+    db::UploadSession& out_session) {
     std::string uploadIdBinary = parse_upload_id_to_binary(uploadIdHex);
     
     SociSessionLease lease(pool_);
     db::UploadSessionDao sessionStore(lease.get());
-    return sessionStore.find(uploadIdBinary, out_session);
+    return sessionStore.find(uploadIdBinary, out_session) && out_session.owner_user_id == ownerUserId;
 }
 
-bool UploadService::create_session(uint64_t totalSize, const std::string& metadataHeader, const std::string&, std::string& out_uploadIdHex) {
+bool UploadService::create_session(const std::string& ownerUserId, uint64_t totalSize,
+    const std::string& metadataHeader, const std::string&, std::string& out_uploadIdHex) {
     std::string filename;
     std::string expectedHash;
     
@@ -183,6 +186,7 @@ bool UploadService::create_session(uint64_t totalSize, const std::string& metada
 
     db::UploadSession session;
     session.upload_id = uploadIdBinary;
+    session.owner_user_id = ownerUserId;
     session.file_name = filename.empty() ? ("upload_" + out_uploadIdHex + ".bin") : filename;
     session.total_size = totalSize;
 
@@ -214,7 +218,9 @@ bool UploadService::create_session(uint64_t totalSize, const std::string& metada
     return true;
 }
 
-UploadChunkResult UploadService::write_session_chunk(const std::string& uploadIdHex, uint64_t clientOffset, const std::string& chunkData, uint64_t& out_newOffset) {
+UploadChunkResult UploadService::write_session_chunk(const std::string& ownerUserId,
+    const std::string& uploadIdHex, uint64_t clientOffset, const std::string& chunkData,
+    uint64_t& out_newOffset) {
     std::string uploadIdBinary = parse_upload_id_to_binary(uploadIdHex);
 
     try {
@@ -224,7 +230,7 @@ UploadChunkResult UploadService::write_session_chunk(const std::string& uploadId
 
         db::UploadSessionDao sessionStore(sql);
         db::UploadSession session;
-        if (!sessionStore.find(uploadIdBinary, session)) {
+        if (!sessionStore.find(uploadIdBinary, session) || session.owner_user_id != ownerUserId) {
             return UploadChunkResult::SessionNotFound;
         }
 
@@ -315,7 +321,7 @@ UploadChunkResult UploadService::write_session_chunk(const std::string& uploadId
     }
 }
 
-bool UploadService::terminate_session(const std::string& uploadIdHex) {
+bool UploadService::terminate_session(const std::string& ownerUserId, const std::string& uploadIdHex) {
     std::string uploadIdBinary = parse_upload_id_to_binary(uploadIdHex);
     
     try {
@@ -324,7 +330,7 @@ bool UploadService::terminate_session(const std::string& uploadIdHex) {
         
         db::UploadSessionDao sessionStore(sql);
         db::UploadSession session;
-        if (!sessionStore.find(uploadIdBinary, session)) {
+        if (!sessionStore.find(uploadIdBinary, session) || session.owner_user_id != ownerUserId) {
             return false;
         }
 

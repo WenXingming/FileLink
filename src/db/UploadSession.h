@@ -10,6 +10,7 @@ namespace db {
 
 struct UploadSession {
     std::string upload_id;       // BINARY(16) mapped to std::string
+    std::string owner_user_id;   // BINARY(16) mapped to std::string
     std::string state;           // VARCHAR(16)
     std::string file_name;       // VARCHAR(255)
     uint64_t total_size = 0;     // BIGINT UNSIGNED

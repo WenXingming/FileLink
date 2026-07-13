@@ -5,6 +5,7 @@
 #include "ApiRouter.h"
 #include "AuthApiRouter.h"
 #include "AuthService.h"
+#include "RequestAuthenticator.h"
 #include "UploadService.h"
 #include "cleaner/SessionCleaner.h"
 #include "cleaner/DedupRunner.h"
@@ -65,11 +66,12 @@ int main(int argc, char* argv[]) {
         // 初始化上传业务服务
         filelink::UploadService uploadService(mysqlPool, config.storageRoot, filelink::ObjectStore(config.storageRoot));
         filelink::AuthService authService(mysqlPool);
+        filelink::RequestAuthenticator requestAuthenticator(authService);
         
         // 挂载 API 路由模块
-        filelink::ApiRouter router(server, downloadService, staticFileService, uploadService);
+        filelink::ApiRouter router(server, downloadService, staticFileService, uploadService, requestAuthenticator);
         router.register_routes();
-        filelink::AuthApiRouter authRouter(server, authService);
+        filelink::AuthApiRouter authRouter(server, authService, requestAuthenticator);
         authRouter.register_routes();
 
         server.start();

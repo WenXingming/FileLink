@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "MySqlTestConfig.h"
 #include "db/UploadSession.h"
+#include "db/User.h"
 #include "cleaner/SessionCleaner.h"
 #include <soci/soci.h>
 #include <soci/mysql/soci-mysql.h>
@@ -19,6 +20,14 @@ protected:
         try {
             sql.open(soci::mysql, filelink::test::mysql_connection_string());
             sql << "DELETE FROM upload_sessions";
+            sql << "DELETE FROM user_sessions";
+            sql << "DELETE FROM users";
+
+            User owner;
+            owner.user_id = owner_user_id_;
+            owner.username = "upload_owner";
+            owner.password_hash = "test-hash";
+            UserDao(sql).create(owner);
         }
         catch (const std::exception& error) {
             FAIL() << "MySQL 集成测试初始化失败: " << error.what();
@@ -31,6 +40,8 @@ protected:
         }
         try {
             sql << "DELETE FROM upload_sessions";
+            sql << "DELETE FROM user_sessions";
+            sql << "DELETE FROM users";
             sql.close();
         }
         catch (const std::exception& error) {
@@ -39,6 +50,7 @@ protected:
     }
 
     soci::session sql;
+    const std::string owner_user_id_ = "upload-owner-id1";
 };
 
 TEST_F(UploadSessionDaoTest, CreateAndFindSession) {
@@ -46,6 +58,7 @@ TEST_F(UploadSessionDaoTest, CreateAndFindSession) {
 
     UploadSession session;
     session.upload_id = "1234567890123456"; // 16 bytes for BINARY(16)
+    session.owner_user_id = owner_user_id_;
     session.state = "UPLOADING";
     session.file_name = "test_dataset.tar.gz";
     session.total_size = 10485760; // 10MB
@@ -67,6 +80,7 @@ TEST_F(UploadSessionDaoTest, CreateAndFindSession) {
     UploadSession found;
     bool exists = store.find("1234567890123456", found);
     ASSERT_TRUE(exists);
+    EXPECT_EQ(found.owner_user_id, owner_user_id_);
     EXPECT_EQ(found.state, "UPLOADING");
     EXPECT_EQ(found.file_name, "test_dataset.tar.gz");
     EXPECT_EQ(found.total_size, 10485760);
@@ -84,6 +98,7 @@ TEST_F(UploadSessionDaoTest, CannotCreateWithOffsetGreaterThanTotalSize) {
 
     UploadSession session;
     session.upload_id = "abcdefghijklmnop";
+    session.owner_user_id = owner_user_id_;
     session.state = "UPLOADING";
     session.file_name = "test2.bin";
     session.total_size = 100;
@@ -102,6 +117,7 @@ TEST_F(UploadSessionDaoTest, SessionCleanerCleansExpiredSessionAndFiles) {
     // 1. Create expired session
     UploadSession session;
     session.upload_id = "1111222233334444"; // 16 bytes
+    session.owner_user_id = owner_user_id_;
     session.state = "UPLOADING";
     session.file_name = "expired.bin";
     session.total_size = 100;
@@ -146,4 +162,3 @@ TEST_F(UploadSessionDaoTest, SessionCleanerCleansExpiredSessionAndFiles) {
     ASSERT_TRUE(exists);
     EXPECT_EQ(found.state, "EXPIRED");
 }
-

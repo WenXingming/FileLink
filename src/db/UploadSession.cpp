@@ -9,10 +9,11 @@ void UploadSessionDao::create(const UploadSession& session) {
     soci::indicator failure_reason_ind = session.has_failure_reason ? soci::i_ok : soci::i_null;
 
     sql_ << "INSERT INTO upload_sessions ("
-            "upload_id, state, file_name, total_size, committed_offset, "
+            "upload_id, owner_user_id, state, file_name, total_size, committed_offset, "
             "expected_hash, content_hash, failure_reason, expires_at) "
-            "VALUES (:id, :state, :name, :size, :offset, :eh, :ch, :fr, :expires)",
+            "VALUES (:id, :owner, :state, :name, :size, :offset, :eh, :ch, :fr, :expires)",
             soci::use(session.upload_id),
+            soci::use(session.owner_user_id),
             soci::use(session.state),
             soci::use(session.file_name),
             soci::use(session.total_size),
@@ -29,10 +30,11 @@ bool UploadSessionDao::find(const std::string& upload_id, UploadSession& session
     soci::indicator failure_reason_ind;
     soci::indicator result_ind;
 
-    sql_ << "SELECT upload_id, state, file_name, total_size, committed_offset, "
+    sql_ << "SELECT upload_id, owner_user_id, state, file_name, total_size, committed_offset, "
             "expected_hash, content_hash, failure_reason, created_at, updated_at, expires_at "
             "FROM upload_sessions WHERE upload_id = :id",
             soci::into(session.upload_id, result_ind),
+            soci::into(session.owner_user_id),
             soci::into(session.state),
             soci::into(session.file_name),
             soci::into(session.total_size),

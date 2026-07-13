@@ -1,5 +1,6 @@
 #include "ApiRouter.h"
 #include "ApiResponseView.h"
+#include "AuthService.h"
 
 #include "tudou/http/HttpRequest.h"
 #include "tudou/http/HttpResponse.h"
@@ -16,11 +17,13 @@
 
 namespace filelink {
 
-ApiRouter::ApiRouter(HttpServer& server, DownloadService& downloadService, StaticFileService& staticFileService, UploadService& uploadService)
+ApiRouter::ApiRouter(HttpServer& server, DownloadService& downloadService, StaticFileService& staticFileService,
+    UploadService& uploadService, RequestAuthenticator& requestAuthenticator)
     : server_(server),
     downloadService_(downloadService),
     staticFileService_(staticFileService),
-    uploadService_(uploadService) {
+    uploadService_(uploadService),
+    requestAuthenticator_(requestAuthenticator) {
 }
 
 void ApiRouter::register_routes() {
@@ -164,9 +167,27 @@ void ApiRouter::handle_tus_options(const HttpRequest&, HttpResponse& response) {
     response = ApiResponseView::tus_options();
 }
 
+bool ApiRouter::authenticate_upload_request(const HttpRequest& req, AuthenticatedUser& out_user,
+    HttpResponse& response) {
+    const RequestAuthResult auth_result = requestAuthenticator_.authenticate(req, out_user);
+    if (auth_result == RequestAuthResult::Authenticated) {
+        return true;
+    }
+
+    response = ApiResponseView::tus_error(auth_result == RequestAuthResult::SystemError ? 500 : 401,
+        auth_result == RequestAuthResult::SystemError ? "Internal Server Error" : "Unauthorized",
+        auth_result == RequestAuthResult::SystemError ? "Authentication Failed" : "Unauthorized");
+    return false;
+}
+
 void ApiRouter::handle_tus_head(const HttpRequest& req, HttpResponse& response) {
     if (req.get_method() != "HEAD") {
         response = ApiResponseView::tus_error(405, "Method Not Allowed", "Method Not Allowed");
+        return;
+    }
+
+    AuthenticatedUser user;
+    if (!authenticate_upload_request(req, user, response)) {
         return;
     }
 
@@ -182,7 +203,7 @@ void ApiRouter::handle_tus_head(const HttpRequest& req, HttpResponse& response) 
     uint64_t totalSize = 0;
 
     try {
-        if (!uploadService_.get_session_progress(uploadIdRaw, offset, totalSize)) {
+        if (!uploadService_.get_session_progress(user.user_id, uploadIdRaw, offset, totalSize)) {
             response = ApiResponseView::tus_error(404, "Not Found", "Upload Session Not Found");
             return;
         }
@@ -199,6 +220,11 @@ void ApiRouter::handle_tus_create(const HttpRequest& req, HttpResponse& response
 
     if (req.get_method() != "POST") {
         response = ApiResponseView::tus_error(405, "Method Not Allowed", "Method Not Allowed");
+        return;
+    }
+
+    AuthenticatedUser user;
+    if (!authenticate_upload_request(req, user, response)) {
         return;
     }
 
@@ -230,7 +256,7 @@ void ApiRouter::handle_tus_create(const HttpRequest& req, HttpResponse& response
 
     try {
         std::string uploadIdHex;
-        if (!uploadService_.create_session(totalSize, metadata, host, uploadIdHex)) {
+        if (!uploadService_.create_session(user.user_id, totalSize, metadata, host, uploadIdHex)) {
             response = ApiResponseView::tus_error(500, "Internal Server Error", "Failed to create session");
             return;
         }
@@ -247,6 +273,11 @@ void ApiRouter::handle_tus_patch(const HttpRequest& req, HttpResponse& response)
 
     if (req.get_method() != "PATCH") {
         response = ApiResponseView::tus_error(405, "Method Not Allowed", "Method Not Allowed");
+        return;
+    }
+
+    AuthenticatedUser user;
+    if (!authenticate_upload_request(req, user, response)) {
         return;
     }
 
@@ -281,7 +312,8 @@ void ApiRouter::handle_tus_patch(const HttpRequest& req, HttpResponse& response)
 
     try {
         uint64_t newOffset = 0;
-        UploadChunkResult rc = uploadService_.write_session_chunk(uploadIdRaw, clientOffset, req.get_body(), newOffset);
+        UploadChunkResult rc = uploadService_.write_session_chunk(user.user_id, uploadIdRaw,
+            clientOffset, req.get_body(), newOffset);
         if (rc == UploadChunkResult::Success) {
             response = ApiResponseView::tus_patched(newOffset);
         }
@@ -309,6 +341,11 @@ void ApiRouter::handle_tus_get_session(const HttpRequest& req, HttpResponse& res
         return;
     }
 
+    AuthenticatedUser user;
+    if (!authenticate_upload_request(req, user, response)) {
+        return;
+    }
+
     const std::string prefix = "/uploads/";
     const std::string path = req.get_path();
     if (path.size() <= prefix.size()) {
@@ -319,7 +356,7 @@ void ApiRouter::handle_tus_get_session(const HttpRequest& req, HttpResponse& res
 
     try {
         db::UploadSession session;
-        if (!uploadService_.get_session(uploadIdRaw, session)) {
+        if (!uploadService_.get_session(user.user_id, uploadIdRaw, session)) {
             response = ApiResponseView::tus_error(404, "Not Found", "Upload Session Not Found");
             return;
         }
@@ -339,6 +376,11 @@ void ApiRouter::handle_tus_terminate(const HttpRequest& req, HttpResponse& respo
         return;
     }
 
+    AuthenticatedUser user;
+    if (!authenticate_upload_request(req, user, response)) {
+        return;
+    }
+
     const std::string prefix = "/uploads/";
     const std::string path = req.get_path();
     if (path.size() <= prefix.size()) {
@@ -348,7 +390,7 @@ void ApiRouter::handle_tus_terminate(const HttpRequest& req, HttpResponse& respo
     std::string uploadIdRaw = path.substr(prefix.size());
 
     try {
-        if (!uploadService_.terminate_session(uploadIdRaw)) {
+        if (!uploadService_.terminate_session(user.user_id, uploadIdRaw)) {
             response = ApiResponseView::tus_error(404, "Not Found", "Upload Session Not Found or Cannot Be Terminated");
             return;
         }

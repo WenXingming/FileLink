@@ -1,17 +1,17 @@
 #pragma once
 
 #include "tudou/http/HttpServer.h"
+#include "RequestAuthenticator.h"
 
 namespace filelink {
-
-class AuthService;
 
 class AuthApiRouter {
     friend class AuthApiTest;
 
 public:
-    AuthApiRouter(HttpServer& server, AuthService& auth_service)
-        : server_(server), auth_service_(auth_service) {}
+    AuthApiRouter(HttpServer& server, AuthService& auth_service,
+        RequestAuthenticator& request_authenticator)
+        : server_(server), auth_service_(auth_service), request_authenticator_(request_authenticator) {}
 
     void register_routes();
 
@@ -23,6 +23,7 @@ private:
 
     HttpServer& server_;
     AuthService& auth_service_;
+    RequestAuthenticator& request_authenticator_;
 };
 
 } // namespace filelink

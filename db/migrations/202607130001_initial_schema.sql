@@ -56,7 +56,7 @@ CREATE TABLE files (
 -- UploadSession 只描述临时传输过程；成功后通过 completed_file_id 指向最终逻辑文件。
 CREATE TABLE upload_sessions (
     upload_id BINARY(16) NOT NULL,
-    owner_user_id BINARY(16) NULL,
+    owner_user_id BINARY(16) NOT NULL,
     state VARCHAR(16) NOT NULL,
     file_name VARCHAR(255) NOT NULL,
     total_size BIGINT UNSIGNED NOT NULL,

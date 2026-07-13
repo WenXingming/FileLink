@@ -40,9 +40,26 @@ for _ in {1..50}; do
     sleep 0.05
 done
 
-# 1. 初始化 TUS 会话
+# 1. 注册并取得认证 Cookie
+auth_headers=$(mktemp)
+"$curl" --noproxy "*" -i -X POST \
+    -H "Content-Type: application/json" \
+    -d "{\"username\":\"upload_test_${port}\",\"password\":\"correct-password\"}" \
+    --silent --show-error "http://127.0.0.1:${port}/auth/register" > "$auth_headers"
+
+session_cookie=$(awk -F': ' 'tolower($1) == "set-cookie" { sub(/\r$/, "", $2); split($2, parts, ";"); print parts[1]; exit }' "$auth_headers")
+rm -f "$auth_headers"
+
+if [[ -z "$session_cookie" ]]; then
+    echo "Failed to get authentication cookie" >&2
+    exit 1
+fi
+
+# 2. 初始化 TUS 会话
 resp_headers=$(mktemp)
-"$curl" --noproxy "*" -i -X POST -H "Upload-Length: 11" -H "Upload-Metadata: filename aGVsbG8udHh0" --silent --show-error "http://127.0.0.1:${port}/uploads" > "$resp_headers"
+"$curl" --noproxy "*" -i -X POST -H "Cookie: $session_cookie" \
+    -H "Upload-Length: 11" -H "Upload-Metadata: filename aGVsbG8udHh0" \
+    --silent --show-error "http://127.0.0.1:${port}/uploads" > "$resp_headers"
 
 location=$(grep -i "Location:" "$resp_headers" | awk '{print $2}' | tr -d '\r\n')
 rm -f "$resp_headers"
@@ -52,16 +69,18 @@ if [[ -z "$location" ]]; then
     exit 1
 fi
 
-# 2. PATCH 上传分片数据
-patch_resp="$("$curl" --noproxy "*" -i -X PATCH -H "Content-Type: application/offset+octet-stream" -H "Upload-Offset: 0" -d "hello world" --silent --show-error "$location")"
+# 3. PATCH 上传分片数据
+patch_resp="$("$curl" --noproxy "*" -i -X PATCH -H "Cookie: $session_cookie" \
+    -H "Content-Type: application/offset+octet-stream" -H "Upload-Offset: 0" \
+    -d "hello world" --silent --show-error "$location")"
 
-# 3. 轮询获取会话状态，提取最终哈希值
+# 4. 轮询获取会话状态，提取最终哈希值
 expected_hash="d74981efa70a0c880b8d8c1985d075dbcbf679b99a5f9914e5aaf96b831a9e24"
 completed=false
 hash=""
 
 for _ in {1..50}; do
-    get_resp="$("$curl" --noproxy "*" --silent --show-error "$location")"
+    get_resp="$("$curl" --noproxy "*" -H "Cookie: $session_cookie" --silent --show-error "$location")"
     if [[ "$get_resp" == *"\"state\":\"COMPLETED\""* ]]; then
         completed=true
         hash=$(echo "$get_resp" | grep -o '"content_hash":"[^"]*' | cut -d'"' -f4 || true)

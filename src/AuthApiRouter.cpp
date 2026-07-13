@@ -4,8 +4,6 @@
 
 #include <nlohmann/json.hpp>
 
-#include <cctype>
-
 namespace filelink {
 
 namespace {
@@ -49,45 +47,6 @@ bool read_credentials(const HttpRequest& request, std::string& username, std::st
     } catch (const nlohmann::json::exception&) {
         return false;
     }
-}
-
-std::string trim_whitespace(const std::string& value) {
-    std::size_t first = 0;
-    while (first < value.size() && std::isspace(static_cast<unsigned char>(value[first]))) {
-        ++first;
-    }
-
-    std::size_t last = value.size();
-    while (last > first && std::isspace(static_cast<unsigned char>(value[last - 1]))) {
-        --last;
-    }
-    return value.substr(first, last - first);
-}
-
-bool read_session_token(const HttpRequest& request, std::string& session_token) {
-    const std::string& cookies = request.get_header("Cookie");
-    bool found = false;
-    std::size_t begin = 0;
-
-    while (begin <= cookies.size()) {
-        const std::size_t end = cookies.find(';', begin);
-        const std::string cookie = trim_whitespace(cookies.substr(begin, end - begin));
-        const std::size_t equals = cookie.find('=');
-        if (equals != std::string::npos && trim_whitespace(cookie.substr(0, equals)) == "filelink_session") {
-            if (found) {
-                return false;
-            }
-            session_token = trim_whitespace(cookie.substr(equals + 1));
-            found = true;
-        }
-
-        if (end == std::string::npos) {
-            break;
-        }
-        begin = end + 1;
-    }
-
-    return found && !session_token.empty();
 }
 
 } // namespace
@@ -158,21 +117,15 @@ void AuthApiRouter::handle_login(const HttpRequest& request, HttpResponse& respo
 }
 
 void AuthApiRouter::handle_current_user(const HttpRequest& request, HttpResponse& response) {
-    std::string session_token;
-    if (!read_session_token(request, session_token)) {
-        response = json_response(401, "Unauthorized", {{"message", "Unauthorized"}});
-        return;
-    }
-
     AuthenticatedUser user;
-    switch (auth_service_.current_user(session_token, user)) {
-    case CurrentUserResult::Success:
+    switch (request_authenticator_.authenticate(request, user)) {
+    case RequestAuthResult::Authenticated:
         response = json_response(200, "OK", {{"username", user.username}});
         return;
-    case CurrentUserResult::InvalidSession:
+    case RequestAuthResult::Unauthorized:
         response = json_response(401, "Unauthorized", {{"message", "Unauthorized"}});
         return;
-    case CurrentUserResult::SystemError:
+    case RequestAuthResult::SystemError:
         response = json_response(500, "Internal Server Error", {{"message", "Current user lookup failed"}});
         return;
     }
@@ -180,7 +133,7 @@ void AuthApiRouter::handle_current_user(const HttpRequest& request, HttpResponse
 
 void AuthApiRouter::handle_logout(const HttpRequest& request, HttpResponse& response) {
     std::string session_token;
-    if (read_session_token(request, session_token)
+    if (request_authenticator_.session_token(request, session_token)
         && auth_service_.logout(session_token) == LogoutResult::SystemError) {
         response = json_response(500, "Internal Server Error", {{"message", "Logout failed"}});
         return;
