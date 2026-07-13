@@ -39,10 +39,7 @@ protected:
     }
 
     void create_object(const std::string& content_hash) {
-        filelink::db::Object object;
-        object.content_hash = content_hash;
-        object.byte_size = 42;
-        filelink::db::ObjectDao(sql_).create(object);
+        filelink::db::ObjectDao(sql_).add_reference(content_hash, 42);
     }
 
     soci::session sql_;
@@ -59,7 +56,7 @@ TEST_F(FileDaoTest, CreatesAndListsOnlyOwnersFilesNewestFirst) {
     filelink::db::FileDao files(sql_);
     files.create({"first-file-id-01", alice_id, content_hash, "first.txt", {}});
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    files.create({"second-file-id2", alice_id, content_hash, "second.txt", {}});
+    files.create({"second-file-id02", alice_id, content_hash, "second.txt", {}});
     files.create({"third-file-id03", bob_id, content_hash, "private.txt", {}});
 
     std::vector<filelink::db::File> alice_files;
@@ -70,8 +67,20 @@ TEST_F(FileDaoTest, CreatesAndListsOnlyOwnersFilesNewestFirst) {
     EXPECT_EQ(alice_files[1].display_name, "first.txt");
     EXPECT_EQ(alice_files[1].content_hash, content_hash);
 
+    filelink::db::File found_file;
+    EXPECT_TRUE(files.find_by_id_and_owner("second-file-id02", alice_id, found_file));
+    EXPECT_EQ(found_file.display_name, "second.txt");
+    EXPECT_FALSE(files.find_by_id_and_owner("second-file-id02", bob_id, found_file));
+
     std::vector<filelink::db::File> bob_files;
     files.find_by_owner(bob_id, bob_files);
     ASSERT_EQ(bob_files.size(), 1u);
     EXPECT_EQ(bob_files[0].display_name, "private.txt");
+
+    EXPECT_FALSE(files.remove_by_id_and_owner("second-file-id02", bob_id));
+    EXPECT_TRUE(files.remove_by_id_and_owner("second-file-id02", alice_id));
+    EXPECT_FALSE(files.remove_by_id_and_owner("second-file-id02", alice_id));
+    files.find_by_owner(alice_id, alice_files);
+    ASSERT_EQ(alice_files.size(), 1u);
+    EXPECT_EQ(alice_files[0].display_name, "first.txt");
 }

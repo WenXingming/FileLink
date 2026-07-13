@@ -31,5 +31,31 @@ void FileDao::find_by_owner(const std::string& owner_user_id, std::vector<File>&
     }
 }
 
+bool FileDao::find_by_id_and_owner(const std::string& file_id, const std::string& owner_user_id,
+    File& out_file) {
+    soci::indicator result_ind;
+
+    sql_ << "SELECT file_id, owner_user_id, content_hash, display_name, created_at "
+            "FROM files WHERE file_id = :file_id AND owner_user_id = :owner_user_id",
+            soci::into(out_file.file_id, result_ind),
+            soci::into(out_file.owner_user_id),
+            soci::into(out_file.content_hash),
+            soci::into(out_file.display_name),
+            soci::into(out_file.created_at),
+            soci::use(file_id),
+            soci::use(owner_user_id);
+
+    return result_ind == soci::i_ok;
+}
+
+bool FileDao::remove_by_id_and_owner(const std::string& file_id, const std::string& owner_user_id) {
+    soci::statement statement = (sql_.prepare
+        << "DELETE FROM files WHERE file_id = :file_id AND owner_user_id = :owner_user_id",
+        soci::use(file_id),
+        soci::use(owner_user_id));
+    statement.execute(false);
+    return statement.get_affected_rows() == 1;
+}
+
 } // namespace db
 } // namespace filelink

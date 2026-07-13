@@ -3,13 +3,12 @@
 namespace filelink {
 namespace db {
 
-void ObjectDao::create(const Object& object) {
+void ObjectDao::add_reference(const std::string& content_hash, uint64_t byte_size) {
     sql_ << "INSERT INTO objects (content_hash, byte_size, ref_count, state) "
-            "VALUES (:hash, :size, :ref_count, :state)",
-            soci::use(object.content_hash),
-            soci::use(object.byte_size),
-            soci::use(object.ref_count),
-            soci::use(object.state);
+            "VALUES (:hash, :size, 1, 'READY') "
+            "ON DUPLICATE KEY UPDATE ref_count = ref_count + 1, state = 'READY'",
+            soci::use(content_hash),
+            soci::use(byte_size);
 }
 
 bool ObjectDao::find(const std::string& content_hash, Object& out_object) {

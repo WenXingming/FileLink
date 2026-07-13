@@ -25,7 +25,7 @@ class ObjectDao {
 public:
     explicit ObjectDao(soci::session& sql) : sql_(sql) {}
 
-    void create(const Object& object);
+    void add_reference(const std::string& content_hash, uint64_t byte_size);
     bool find(const std::string& content_hash, Object& out_object);
 
 private:

@@ -27,20 +27,18 @@ protected:
     soci::session sql_;
 };
 
-TEST_F(ObjectDaoTest, CreatesAndFindsObject) {
+TEST_F(ObjectDaoTest, AddsReferencesAndFindsObject) {
     filelink::db::ObjectDao objects(sql_);
-    filelink::db::Object object;
-    object.content_hash = "12345678901234567890123456789012";
-    object.byte_size = 42;
-    object.ref_count = 3;
+    const std::string content_hash = "12345678901234567890123456789012";
 
-    objects.create(object);
+    objects.add_reference(content_hash, 42);
+    objects.add_reference(content_hash, 42);
 
     filelink::db::Object found;
-    ASSERT_TRUE(objects.find(object.content_hash, found));
-    EXPECT_EQ(found.content_hash, object.content_hash);
+    ASSERT_TRUE(objects.find(content_hash, found));
+    EXPECT_EQ(found.content_hash, content_hash);
     EXPECT_EQ(found.byte_size, 42u);
-    EXPECT_EQ(found.ref_count, 3u);
+    EXPECT_EQ(found.ref_count, 2u);
     EXPECT_EQ(found.state, "READY");
     EXPECT_FALSE(objects.find("abcdefghijklmnopqrstuvwxzy123456", found));
 }
