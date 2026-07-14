@@ -102,7 +102,7 @@ void FileApiRouter::register_routes() {
         handle_list_files(request, response);
     });
     server_.add_prefix_route("/files/", [this](const HttpRequest& request, HttpResponse& response) {
-        if (share_api_router_.handle_request(request, response)) {
+        if (share_api_router_.handle_management_request(request, response)) {
             return;
         }
         if (request.get_method() == "GET") {

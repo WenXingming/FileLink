@@ -320,11 +320,12 @@
 
             <div class="auth-body">
                 <div class="login-area">
-                    <div class="auth-mode-switch" role="tablist" aria-label="账户操作">
+                    <div class="auth-mode-switch" role="tablist" aria-label="账户操作" id="authModeSwitch">
                         <button class="auth-mode-button active" id="loginModeButton" type="button"
                             role="tab" aria-selected="true">登录</button>
                         <button class="auth-mode-button" id="registerModeButton" type="button"
                             role="tab" aria-selected="false">创建账户</button>
+                        <div class="segment-slider" id="authModeSlider"></div>
                     </div>
                     <div class="login-form">
                         <label class="auth-field" for="loginUser">
@@ -350,6 +351,49 @@
                         <span>未登录</span>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== SHARE DIALOG MODAL ==================== -->
+    <div class="auth-overlay share-overlay" id="shareOverlay" aria-hidden="true">
+        <div class="auth-modal share-modal" role="dialog" aria-modal="true" aria-labelledby="shareModalTitle">
+            <button class="auth-close-btn" id="shareCloseBtn" type="button" aria-label="关闭" title="关闭">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="auth-modal-header">
+                <div class="auth-modal-title" id="shareModalTitle">分享文件</div>
+                <div class="auth-modal-subtitle" id="shareFileName"></div>
+            </div>
+            <div class="share-body">
+                <div class="share-create-row">
+                    <label class="share-expiry-label">链接有效期</label>
+                    <div class="segmented-control share-expiry-segmented" id="shareExpirySegmented">
+                        <button class="segment-btn" data-value="86400" type="button">1 天</button>
+                        <button class="segment-btn active" data-value="604800" type="button">7 天</button>
+                        <button class="segment-btn" data-value="2592000" type="button">30 天</button>
+                        <div class="segment-slider"></div>
+                    </div>
+                    <select id="shareExpiry" class="share-expiry-select" style="display: none;">
+                        <option value="86400">1 天</option>
+                        <option value="604800" selected>7 天</option>
+                        <option value="2592000">30 天</option>
+                    </select>
+                    <button class="login-btn share-create-btn" id="createShareBtn" type="button">创建分享链接</button>
+                </div>
+                <p class="share-token-note">链接仅在创建时展示一次，请立即复制保存。</p>
+                <div class="share-new-link" id="shareNewLink" hidden>
+                    <div class="result-label">新的公开下载地址</div>
+                    <div class="download-link-container">
+                        <input class="share-link-input" id="shareLinkInput" readonly aria-label="公开下载地址">
+                        <button class="copy-btn-small" id="copyShareLinkBtn" type="button">复制</button>
+                    </div>
+                </div>
+                <div class="share-list-header">
+                    <h3>有效分享</h3>
+                    <span id="shareListStatus"></span>
+                </div>
+                <div class="share-list" id="shareList"></div>
             </div>
         </div>
     </div>

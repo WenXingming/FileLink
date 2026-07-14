@@ -53,10 +53,21 @@ const fileCountBadge = document.getElementById('fileCountBadge');
 const refreshFilesBtn = document.getElementById('refreshFilesBtn');
 const filesTableBody = document.getElementById('filesTableBody');
 const panelTitle = document.getElementById('panelTitle');
+const shareOverlay = document.getElementById('shareOverlay');
+const shareCloseBtn = document.getElementById('shareCloseBtn');
+const shareFileName = document.getElementById('shareFileName');
+const shareExpiry = document.getElementById('shareExpiry');
+const createShareBtn = document.getElementById('createShareBtn');
+const shareNewLink = document.getElementById('shareNewLink');
+const shareLinkInput = document.getElementById('shareLinkInput');
+const copyShareLinkBtn = document.getElementById('copyShareLinkBtn');
+const shareList = document.getElementById('shareList');
+const shareListStatus = document.getElementById('shareListStatus');
 
 const THEME_STORAGE_KEY = 'fileshare.theme';
 let currentUser = null;
 let authMode = 'login';
+let sharingFile = null;
 
 let selectedFile = null;
 let currentXhr = null;
@@ -237,6 +248,50 @@ async function copyToClipboard(text) {
     }
 }
 
+// Centralized Toast Notification System
+function showToast(message, type = 'success') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        document.body.appendChild(container);
+    }
+    
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    
+    let iconSvg = '';
+    if (type === 'success') {
+        iconSvg = `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    } else if (type === 'error') {
+        iconSvg = `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+    } else {
+        iconSvg = `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="12" x2="12" y2="16"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+    }
+    
+    toast.innerHTML = `
+        ${iconSvg}
+        <span class="toast-msg">${escapeHtml(message)}</span>
+    `;
+    
+    container.appendChild(toast);
+    
+    requestAnimationFrame(() => {
+        toast.classList.add('show');
+    });
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.classList.add('hide');
+        toast.addEventListener('transitionend', () => {
+            toast.remove();
+            if (container.childNodes.length === 0) {
+                container.remove();
+            }
+        });
+    }, 3000);
+}
+
 // SPA Routing & Navigation
 function navigateToDashboard() {
     landingView.hidden = true;
@@ -305,6 +360,7 @@ document.querySelectorAll('.copy-code-btn').forEach(btn => {
             const orig = btn.textContent;
             btn.textContent = ok ? '已复制' : '失败';
             setTimeout(() => btn.textContent = orig, 1500);
+            if (ok) showToast('API集成命令已复制到剪贴板', 'success');
         });
     });
 });
@@ -391,13 +447,27 @@ function renderFiles(files, emptyMessage) {
         const fileId = escapeHtml(file.file_id);
         return `<tr><td><div class="table-file-name-cell">${getFileIconSvg(file.name)}
             <span class="table-file-name-text" title="${name}">${name}</span></div></td>
-            <td><div class="table-actions"><a href="/files/${fileId}/download" class="table-action-btn">下载</a>
-            <button class="table-action-btn delete-file-btn" data-file-id="${fileId}" type="button">删除</button>
+            <td><div class="table-actions">
+            <a href="/files/${fileId}/download" class="table-action-btn btn-download" title="下载">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>下载</span>
+            </a>
+            <button class="table-action-btn share-file-btn btn-share" data-file-id="${fileId}" data-file-name="${name}" type="button" title="分享">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                <span>分享</span>
+            </button>
+            <button class="table-action-btn delete-file-btn btn-delete" data-file-id="${fileId}" type="button" title="删除">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                <span>删除</span>
+            </button>
             </div></td></tr>`;
     }).join('');
 
     filesTableBody.querySelectorAll('.delete-file-btn').forEach(button => {
         button.addEventListener('click', () => deleteFile(button.dataset.fileId));
+    });
+    filesTableBody.querySelectorAll('.share-file-btn').forEach(button => {
+        button.addEventListener('click', () => openShareModal(button.dataset.fileId, button.dataset.fileName));
     });
 }
 
@@ -430,8 +500,9 @@ async function deleteFile(fileId) {
         const response = await fetch(`/files/${fileId}`, {method: 'DELETE'});
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         await refreshFiles();
+        showToast('文件已成功删除', 'success');
     } catch (_) {
-        showError('删除文件失败，请重试');
+        showToast('删除文件失败，请重试', 'error');
     }
 }
 
@@ -459,6 +530,7 @@ function showAuthModal() {
     clearAuthError();
     authOverlay.classList.add('show');
     authOverlay.setAttribute('aria-hidden', 'false');
+    setTimeout(updateAuthModeSlider, 50);
 }
 
 function setAuthMode(nextMode) {
@@ -479,11 +551,110 @@ function setAuthMode(nextMode) {
     registerModeButton.classList.toggle('active', isRegistration);
     registerModeButton.setAttribute('aria-selected', String(isRegistration));
     clearAuthError();
+    updateAuthModeSlider();
 }
 
 function hideAuthModal() {
     authOverlay.classList.remove('show');
     authOverlay.setAttribute('aria-hidden', 'true');
+}
+
+function showShareError(message) {
+    shareList.innerHTML = `<p class="share-list-message">${escapeHtml(message)}</p>`;
+}
+
+function hideShareModal() {
+    sharingFile = null;
+    shareOverlay.classList.remove('show');
+    shareOverlay.setAttribute('aria-hidden', 'true');
+}
+
+function formatShareExpiry(seconds) {
+    return new Date(seconds * 1000).toLocaleString('zh-CN', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+    });
+}
+
+function renderShares(shares) {
+    if (shares.length === 0) {
+        shareList.innerHTML = '<p class="share-list-message">暂无有效分享链接</p>';
+        return;
+    }
+    shareList.innerHTML = shares.map(share => `<div class="share-item">
+        <div><div class="share-item-title">有效至 ${formatShareExpiry(share.expires_at)}</div>
+        <div class="share-item-note">令牌仅在创建时展示，可随时撤销。</div></div>
+        <button class="table-action-btn revoke-share-btn" data-share-id="${share.share_id}" type="button">撤销</button>
+    </div>`).join('');
+}
+
+async function loadShares() {
+    if (!sharingFile) return;
+    shareListStatus.textContent = '加载中…';
+    try {
+        const response = await fetch(`/files/${sharingFile.id}/shares`);
+        if (response.status === 401) throw new Error('登录已过期');
+        if (!response.ok) throw new Error('无法读取分享链接');
+        const body = await response.json();
+        renderShares(Array.isArray(body.shares) ? body.shares : []);
+        shareListStatus.textContent = '';
+    } catch (error) {
+        showShareError(error.message || '加载失败，请重试');
+        shareListStatus.textContent = '';
+    }
+}
+
+async function openShareModal(fileId, fileName) {
+    sharingFile = {id: fileId, name: fileName};
+    shareFileName.textContent = fileName;
+    shareNewLink.hidden = true;
+    shareLinkInput.value = '';
+    shareOverlay.classList.add('show');
+    shareOverlay.setAttribute('aria-hidden', 'false');
+    
+    // Set default segment select and position the slider
+    const defaultSegment = document.querySelector('#shareExpirySegmented .segment-btn[data-value="604800"]');
+    if (defaultSegment) {
+        setTimeout(() => selectExpirySegment(defaultSegment), 50);
+    }
+    
+    await loadShares();
+}
+
+async function createShare() {
+    if (!sharingFile) return;
+    createShareBtn.disabled = true;
+    try {
+        const response = await fetch(`/files/${sharingFile.id}/shares`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({expires_in_seconds: Number(shareExpiry.value)})
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.token) throw new Error(body.message || '创建失败，请重试');
+        shareLinkInput.value = `${window.location.origin}/shares/${body.token}/download`;
+        shareNewLink.hidden = false;
+        await loadShares();
+        showToast('公开分享链接已成功创建', 'success');
+    } catch (error) {
+        showShareError(error.message || '创建失败，请重试');
+        showToast(error.message || '创建失败，请重试', 'error');
+    } finally {
+        createShareBtn.disabled = false;
+    }
+}
+
+async function revokeShare(shareId) {
+    if (!sharingFile || !confirm('撤销后该公开链接将立即失效，确定继续吗？')) return;
+    try {
+        const response = await fetch(`/files/${sharingFile.id}/shares/${shareId}`, {method: 'DELETE'});
+        if (!response.ok) throw new Error('撤销失败，请重试');
+        await loadShares();
+        showToast('分享链接已成功撤销', 'success');
+    } catch (error) {
+        showShareError(error.message || '撤销失败，请重试');
+        showToast(error.message || '撤销失败，请重试', 'error');
+    }
 }
 
 landingLoginBtn.addEventListener('click', () => {
@@ -518,13 +689,34 @@ authOverlay.addEventListener('click', (e) => {
     if (e.target === authOverlay) hideAuthModal();
 });
 
+shareCloseBtn.addEventListener('click', hideShareModal);
+shareOverlay.addEventListener('click', (e) => {
+    if (e.target === shareOverlay) hideShareModal();
+});
+createShareBtn.addEventListener('click', createShare);
+copyShareLinkBtn.addEventListener('click', async () => {
+    const originalText = copyShareLinkBtn.textContent;
+    const ok = await copyToClipboard(shareLinkInput.value);
+    copyShareLinkBtn.textContent = ok ? '已复制' : '复制失败';
+    setTimeout(() => { copyShareLinkBtn.textContent = originalText; }, 1500);
+    if (ok) showToast('公开分享链接已复制到剪贴板', 'success');
+});
+shareList.addEventListener('click', (event) => {
+    const button = event.target.closest('.revoke-share-btn');
+    if (button) revokeShare(button.dataset.shareId);
+});
+
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') hideAuthModal();
+    if (e.key === 'Escape') {
+        hideAuthModal();
+        hideShareModal();
+    }
 });
 
 // Dropzone interactions
 uploadArea.addEventListener('click', () => {
     if (uploadArea.classList.contains('disabled')) {
+        showToast('请先登录您的账户', 'error');
         showError('请先登录您的账户');
         return;
     }
@@ -900,8 +1092,10 @@ async function submitAuth() {
         clearAuthError();
         hideAuthModal();
         navigateToDashboard();
+        showToast(isRegistration ? '账户注册成功' : '您已成功登录', 'success');
     } catch (error) {
         showAuthError(`${actionName}失败: ${error.message || String(error)}`);
+        showToast(`${actionName}失败: ${error.message || String(error)}`, 'error');
     } finally {
         updateAuthUI();
     }
@@ -930,13 +1124,16 @@ async function executeLogout() {
         const response = await fetch('/auth/logout', {method: 'POST'});
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         currentUser = null;
+        hideShareModal();
         resetUploadDownloadPageState();
         hideAuthModal();
         navigateToLanding();
         refreshFiles();
+        showToast('您已成功退出登录', 'info');
     } catch (_) {
         showAuthModal();
         showAuthError('退出登录失败，请重试');
+        showToast('退出登录失败，请重试', 'error');
     }
 }
 
@@ -949,6 +1146,7 @@ copyButton.addEventListener('click', () => {
         const originalText = copyButton.textContent;
         copyButton.textContent = ok ? '已复制' : '复制失败';
         setTimeout(() => copyButton.textContent = originalText, 1500);
+        if (ok) showToast('私有下载链接已复制到剪贴板', 'success');
     });
 });
 
@@ -983,3 +1181,142 @@ function formatFileSize(bytes) {
 
 updateAuthUI();
 refreshCurrentUser();
+
+// Auth Mode Slider and Expiry Segment UI Helpers
+function updateAuthModeSlider() {
+    const authModeSlider = document.getElementById('authModeSlider');
+    if (!authModeSlider) return;
+    const isRegistration = authMode === 'register';
+    const activeBtn = isRegistration ? registerModeButton : loginModeButton;
+    if (activeBtn) {
+        authModeSlider.style.width = `${activeBtn.offsetWidth}px`;
+        authModeSlider.style.transform = `translateX(${activeBtn.offsetLeft - 4}px)`;
+    }
+}
+
+function selectExpirySegment(btn) {
+    const segments = document.querySelectorAll('#shareExpirySegmented .segment-btn');
+    segments.forEach(b => b.classList.toggle('active', b === btn));
+    
+    // Sync to hidden select
+    const val = btn.getAttribute('data-value');
+    if (shareExpiry) {
+        shareExpiry.value = val;
+    }
+    
+    // Update slider position
+    const slider = document.querySelector('#shareExpirySegmented .segment-slider');
+    if (slider) {
+        slider.style.width = `${btn.offsetWidth}px`;
+        slider.style.transform = `translateX(${btn.offsetLeft - 4}px)`;
+    }
+}
+
+function initExpirySegments() {
+    const segments = document.querySelectorAll('#shareExpirySegmented .segment-btn');
+    segments.forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectExpirySegment(btn);
+        });
+    });
+}
+
+// Hero terminal typewriter animation
+function initTerminalAnimation() {
+    const terminalBody = document.querySelector('.hero-terminal .terminal-body');
+    if (!terminalBody) return;
+    
+    const lines = [
+        { type: 'cmd', text: 'curl -T my_large_dataset.zip http://filelink.dev/uploads' },
+        { type: 'comment', text: '# 计算 Blake3 哈希进行秒传探测 (Checking hash)...' },
+        { type: 'success', text: 'Instant Upload Success! File deduped on server.' },
+        { type: 'cmd', text: 'echo "Private download:"' },
+        { type: 'link', text: 'http://filelink.dev/files/2f7c9e/download' }
+    ];
+    
+    let currentLineIndex = 0;
+    let currentCharIndex = 0;
+    
+    function render() {
+        terminalBody.innerHTML = '';
+        for (let i = 0; i < currentLineIndex; i++) {
+            appendLine(lines[i], lines[i].text);
+        }
+        if (currentLineIndex < lines.length) {
+            const curLine = lines[currentLineIndex];
+            if (curLine.type === 'cmd') {
+                const textToShow = curLine.text.substring(0, currentCharIndex);
+                appendLine(curLine, textToShow, true);
+            } else {
+                appendLine(curLine, curLine.text);
+            }
+        }
+    }
+    
+    function appendLine(lineObj, text, showCursor = false) {
+        const div = document.createElement('div');
+        div.className = 'line';
+        if (lineObj.type === 'cmd') {
+            div.innerHTML = `<span class="cmd-prompt">$</span> <span class="typed-text"></span>${showCursor ? '<span class="terminal-cursor"></span>' : ''}`;
+            div.querySelector('.typed-text').textContent = text;
+        } else if (lineObj.type === 'comment') {
+            div.className = 'line-comment';
+            div.textContent = text;
+        } else if (lineObj.type === 'success') {
+            div.className = 'line-success';
+            div.textContent = text;
+        } else if (lineObj.type === 'link') {
+            div.className = 'line-link';
+            div.textContent = text;
+        }
+        terminalBody.appendChild(div);
+    }
+    
+    function step() {
+        if (currentLineIndex >= lines.length) {
+            setTimeout(() => {
+                currentLineIndex = 0;
+                currentCharIndex = 0;
+                step();
+            }, 6000);
+            return;
+        }
+        
+        const curLine = lines[currentLineIndex];
+        if (curLine.type === 'cmd') {
+            if (currentCharIndex < curLine.text.length) {
+                currentCharIndex++;
+                render();
+                const delay = Math.random() * 50 + 30; // 30-80ms
+                setTimeout(step, delay);
+            } else {
+                render();
+                currentCharIndex = 0;
+                currentLineIndex++;
+                setTimeout(step, 600);
+            }
+        } else {
+            setTimeout(() => {
+                currentLineIndex++;
+                render();
+                step();
+            }, curLine.type === 'comment' ? 1200 : 400);
+        }
+    }
+    
+    render();
+    setTimeout(step, 1000);
+}
+
+// Window resize listener to sync active sliders
+window.addEventListener('resize', () => {
+    updateAuthModeSlider();
+    const activeExpiry = document.querySelector('#shareExpirySegmented .segment-btn.active');
+    if (activeExpiry) {
+        selectExpirySegment(activeExpiry);
+    }
+});
+
+// Initialize on execution
+initTerminalAnimation();
+initExpirySegments();

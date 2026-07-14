@@ -96,7 +96,8 @@ int main(int argc, char* argv[]) {
         siteRouter.register_routes();
         filelink::AuthApiRouter authRouter(server, authService, requestAuthenticator);
         authRouter.register_routes();
-        filelink::ShareApiRouter shareApiRouter(shareService, requestAuthenticator);
+        filelink::ShareApiRouter shareApiRouter(server, shareService, fileService, requestAuthenticator);
+        shareApiRouter.register_public_routes();
         filelink::FileApiRouter fileRouter(server, fileService, requestAuthenticator, shareApiRouter);
         fileRouter.register_routes();
         filelink::UploadApiRouter uploadRouter(server, uploadService, requestAuthenticator);

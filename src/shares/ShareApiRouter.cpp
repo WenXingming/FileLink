@@ -2,13 +2,20 @@
 
 #include "ShareService.h"
 #include "auth/AuthService.h"
+#include "files/FileService.h"
 
 #include <nlohmann/json.hpp>
 
 #include <ctime>
+#include <fcntl.h>
 #include <iomanip>
 #include <limits>
+#include <memory>
 #include <sstream>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "base/ScopedFd.h"
 
 namespace filelink {
 
@@ -16,6 +23,8 @@ namespace {
 
 const std::string kFilesPrefix = "/files/";
 const std::string kSharesSuffix = "/shares";
+const std::string kPublicSharesPrefix = "/shares/";
+const std::string kDownloadSuffix = "/download";
 const std::size_t kIdHexLength = 32;
 const std::time_t kMaximumShareLifetime = 30 * 24 * 60 * 60;
 
@@ -132,9 +141,35 @@ std::time_t unix_time(std::tm value) {
     return std::mktime(&value);
 }
 
+std::string download_name(const std::string& display_name) {
+    std::string name;
+    for (unsigned char value : display_name) {
+        name.push_back(value >= 32 && value < 127 && value != '"' && value != '\\' ? value : '_');
+    }
+    return name.empty() ? "download" : name;
+}
+
+bool public_token_from_path(const std::string& path, std::string& out_token) {
+    if (path.size() <= kPublicSharesPrefix.size() + kDownloadSuffix.size()
+        || path.compare(0, kPublicSharesPrefix.size(), kPublicSharesPrefix) != 0
+        || path.compare(path.size() - kDownloadSuffix.size(), kDownloadSuffix.size(), kDownloadSuffix) != 0) {
+        return false;
+    }
+
+    out_token = path.substr(kPublicSharesPrefix.size(),
+        path.size() - kPublicSharesPrefix.size() - kDownloadSuffix.size());
+    return !out_token.empty() && out_token.find('/') == std::string::npos;
+}
+
 } // namespace
 
-bool ShareApiRouter::handle_request(const HttpRequest& request, HttpResponse& response) {
+void ShareApiRouter::register_public_routes() {
+    server_.add_prefix_route(kPublicSharesPrefix, [this](const HttpRequest& request, HttpResponse& response) {
+        handle_public_download(request, response);
+    });
+}
+
+bool ShareApiRouter::handle_management_request(const HttpRequest& request, HttpResponse& response) {
     std::string file_id;
     std::string share_id;
     bool is_collection = false;
@@ -152,6 +187,42 @@ bool ShareApiRouter::handle_request(const HttpRequest& request, HttpResponse& re
         response = json_response(404, "Not Found", {{"message", "Not Found"}});
     }
     return true;
+}
+
+void ShareApiRouter::handle_public_download(const HttpRequest& request, HttpResponse& response) {
+    std::string token;
+    if (request.get_method() != "GET" || !public_token_from_path(request.get_path(), token)) {
+        response = json_response(404, "Not Found", {{"message", "Not Found"}});
+        return;
+    }
+
+    try {
+        db::File file;
+        if (!share_service_.find_shared_file(token, file)) {
+            response = json_response(404, "Not Found", {{"message", "Not Found"}});
+            return;
+        }
+
+        const std::string object_path = file_service_.object_path(file);
+        struct stat info;
+        const int descriptor = ::open(object_path.c_str(), O_RDONLY | O_CLOEXEC);
+        if (descriptor == -1 || ::fstat(descriptor, &info) != 0 || !S_ISREG(info.st_mode)) {
+            if (descriptor != -1) {
+                ::close(descriptor);
+            }
+            response = json_response(404, "Not Found", {{"message", "Not Found"}});
+            return;
+        }
+
+        response.set_status(200, "OK");
+        response.set_header("Content-Type", "application/octet-stream");
+        response.set_header("Content-Length", std::to_string(info.st_size));
+        response.set_header("Content-Disposition",
+            "attachment; filename=\"" + download_name(file.display_name) + "\"");
+        response.set_file_body(std::make_shared<ScopedFd>(descriptor), static_cast<size_t>(info.st_size));
+    } catch (const std::exception&) {
+        response = json_response(500, "Internal Server Error", {{"message", "Share download failed"}});
+    }
 }
 
 void ShareApiRouter::handle_create(const HttpRequest& request, HttpResponse& response,
