@@ -25,6 +25,7 @@ if(FILELINK_BUILD_INTEGRATION_TESTS)
         FileDaoTest.cpp
         ShareDaoTest.cpp
         ShareServiceTest.cpp
+        ShareApiTest.cpp
         FileApiTest.cpp
         UserDaoTest.cpp
         UserSessionDaoTest.cpp

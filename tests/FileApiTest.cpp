@@ -6,6 +6,8 @@
 #include "db/Object.h"
 #include "files/FileApiRouter.h"
 #include "files/FileService.h"
+#include "shares/ShareApiRouter.h"
+#include "shares/ShareService.h"
 #include "tudou/http/HttpRequest.h"
 #include "tudou/http/HttpResponse.h"
 #include "tudou/http/HttpServer.h"
@@ -100,7 +102,9 @@ TEST_F(FileApiTest, ListsOnlyCurrentUsersFiles) {
     HttpServer server("127.0.0.1", 9999);
     RequestAuthenticator request_authenticator(auth_service);
     FileService file_service(pool_, ObjectStore("./storage_test"));
-    FileApiRouter router(server, file_service, request_authenticator);
+    ShareService share_service(pool_);
+    ShareApiRouter share_api_router(share_service, request_authenticator);
+    FileApiRouter router(server, file_service, request_authenticator, share_api_router);
 
     const HttpResponse response = list_files(router, alice.session_token);
     ASSERT_EQ(response.get_status_code(), 200);
@@ -115,7 +119,9 @@ TEST_F(FileApiTest, RejectsUnauthenticatedRequests) {
     RequestAuthenticator request_authenticator(auth_service);
     FileService file_service(pool_, ObjectStore("./storage_test"));
     HttpServer server("127.0.0.1", 9999);
-    FileApiRouter router(server, file_service, request_authenticator);
+    ShareService share_service(pool_);
+    ShareApiRouter share_api_router(share_service, request_authenticator);
+    FileApiRouter router(server, file_service, request_authenticator, share_api_router);
 
     const HttpResponse response = list_files(router, "");
     EXPECT_EQ(response.get_status_code(), 401);
@@ -149,7 +155,9 @@ TEST_F(FileApiTest, DownloadsOnlyOwnersFileWithFileBody) {
     HttpServer server("127.0.0.1", 9999);
     RequestAuthenticator request_authenticator(auth_service);
     FileService file_service(pool_, ObjectStore("./storage_test"));
-    FileApiRouter router(server, file_service, request_authenticator);
+    ShareService share_service(pool_);
+    ShareApiRouter share_api_router(share_service, request_authenticator);
+    FileApiRouter router(server, file_service, request_authenticator, share_api_router);
 
     const std::string file_id_hex = "646f776e6c6f61642d66696c65303030";
     const HttpResponse response = download_file(router, file_id_hex, alice.session_token);
@@ -186,7 +194,9 @@ TEST_F(FileApiTest, DeletesOnlyOwnersFileAndMarksLastObjectReferencePending) {
     HttpServer server("127.0.0.1", 9999);
     RequestAuthenticator request_authenticator(auth_service);
     FileService file_service(pool_, ObjectStore("./storage_test"));
-    FileApiRouter router(server, file_service, request_authenticator);
+    ShareService share_service(pool_);
+    ShareApiRouter share_api_router(share_service, request_authenticator);
+    FileApiRouter router(server, file_service, request_authenticator, share_api_router);
 
     const std::string alice_file_id_hex = "616c6963652d66696c652d6964303031";
     const std::string bob_file_id_hex = "626f622d66696c652d69643030303031";

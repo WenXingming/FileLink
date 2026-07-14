@@ -6,6 +6,8 @@
 #include "auth/RequestAuthenticator.h"
 #include "files/FileApiRouter.h"
 #include "files/FileService.h"
+#include "shares/ShareApiRouter.h"
+#include "shares/ShareService.h"
 #include "site/SiteRouter.h"
 #include "uploads/UploadApiRouter.h"
 #include "uploads/UploadService.h"
@@ -87,13 +89,15 @@ int main(int argc, char* argv[]) {
         filelink::AuthService authService(mysqlPool);
         filelink::RequestAuthenticator requestAuthenticator(authService);
         filelink::FileService fileService(mysqlPool, filelink::ObjectStore(config.storageRoot));
+        filelink::ShareService shareService(mysqlPool);
         
         // 挂载 API 路由模块
         filelink::SiteRouter siteRouter(server, staticFileService);
         siteRouter.register_routes();
         filelink::AuthApiRouter authRouter(server, authService, requestAuthenticator);
         authRouter.register_routes();
-        filelink::FileApiRouter fileRouter(server, fileService, requestAuthenticator);
+        filelink::ShareApiRouter shareApiRouter(shareService, requestAuthenticator);
+        filelink::FileApiRouter fileRouter(server, fileService, requestAuthenticator, shareApiRouter);
         fileRouter.register_routes();
         filelink::UploadApiRouter uploadRouter(server, uploadService, requestAuthenticator);
         uploadRouter.register_routes();

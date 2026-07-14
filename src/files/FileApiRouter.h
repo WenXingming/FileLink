@@ -6,6 +6,7 @@
 namespace filelink {
 
 class FileService;
+class ShareApiRouter;
 
 // ====================================================================
 // FileApiRouter：提供当前用户私有文件库的 HTTP 接口。
@@ -15,8 +16,9 @@ class FileApiRouter {
 
 public:
     FileApiRouter(HttpServer& server, FileService& file_service,
-        RequestAuthenticator& request_authenticator)
-        : server_(server), file_service_(file_service), request_authenticator_(request_authenticator) {}
+        RequestAuthenticator& request_authenticator, ShareApiRouter& share_api_router)
+        : server_(server), file_service_(file_service), request_authenticator_(request_authenticator),
+          share_api_router_(share_api_router) {}
 
     void register_routes();
 
@@ -28,6 +30,7 @@ private:
     HttpServer& server_;
     FileService& file_service_;
     RequestAuthenticator& request_authenticator_;
+    ShareApiRouter& share_api_router_;
 };
 
 } // namespace filelink
