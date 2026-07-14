@@ -28,6 +28,76 @@ Redis 模块由一个配置结构体与一个缓存核心操作类组成，其�
 
 ---
 
+## 缓存库连接与操作代码实现
+
+缓存层基于 hiredis 官方客户端进行了线程安全包装，并通过互斥锁（Mutex）控制连接生命周期：
+
+### 1. 查找会话缓存记录
+
+在 [find_user_id](file:///home/wxm/FileLink/src/redis/UserSessionCache.cpp#L59) 中，系统尝试从缓存提取对应的用户 ID，如果 hiredis 返回错误则主动重置连接：
+
+```cpp
+CacheLookupResult UserSessionCache::find_user_id(const std::string& token_hash,
+    std::string& out_user_id) {
+    if (!config_.enabled || token_hash.size() != 32) {
+        return CacheLookupResult::Unavailable;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    redisContext* context = connection_locked(); // 保证连接已建立
+    if (context == nullptr) {
+        return CacheLookupResult::Unavailable;
+    }
+
+    const std::string key = cache_key(token_hash);
+    std::unique_ptr<redisReply, decltype(&freeReplyObject)> reply(
+        static_cast<redisReply*>(redisCommand(context, "GET %b", key.data(), key.size())),
+        &freeReplyObject);
+    if (!reply) {
+        reset_connection_locked(); // 通信失效，物理释放上下文以备下次重连
+        return CacheLookupResult::Unavailable;
+    }
+    if (reply->type == REDIS_REPLY_NIL) {
+        return CacheLookupResult::Miss;
+    }
+    if (reply->type != REDIS_REPLY_STRING
+        || !hex_decode(std::string(reply->str, reply->len), out_user_id)) {
+        return CacheLookupResult::Miss;
+    }
+    return CacheLookupResult::Hit;
+}
+```
+
+### 2. 存入会话并设置 TTL
+
+在 [store_user_id](file:///home/wxm/FileLink/src/redis/UserSessionCache.cpp#L89) 中，系统将用户二进制 ID 转换为十六进制进行文本安全保存，并通过 `EX` 指令绑定 MySQL 的剩余有效期 TTL：
+
+```cpp
+void UserSessionCache::store_user_id(const std::string& token_hash,
+    const std::string& user_id,
+    unsigned int ttl_seconds) {
+    if (!config_.enabled || token_hash.size() != 32 || user_id.size() != 16 || ttl_seconds == 0) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    redisContext* context = connection_locked();
+    if (context == nullptr) return;
+
+    const std::string key = cache_key(token_hash);
+    const std::string value = hex_encode(user_id);
+    std::unique_ptr<redisReply, decltype(&freeReplyObject)> reply(
+        static_cast<redisReply*>(redisCommand(context, "SET %b %b EX %u",
+            key.data(), key.size(), value.data(), value.size(), ttl_seconds)),
+        &freeReplyObject);
+    if (!reply || reply->type == REDIS_REPLY_ERROR) {
+        reset_connection_locked();
+    }
+}
+```
+
+---
+
 ## 生命周期与过期控制
 
 会话在缓存中的生命周期与 MySQL 保持强一致，采用**绝对过期时间**策略，并在缓存读取命中时**不刷新** TTL：

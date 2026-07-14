@@ -37,6 +37,101 @@ RequestAuthenticator ──► AuthService::current_user
 
 ---
 
+## 身份验证与缓存控制代码实现
+
+身份认证逻辑主要由两层组成：[RequestAuthenticator](file:///home/wxm/FileLink/src/auth/RequestAuthenticator.h#L24)（HTTP 拦截适配层）和 [AuthService](file:///home/wxm/FileLink/src/auth/AuthService.h#L73)（核心鉴权业务层）。
+
+### 1. HTTP 拦截校验的实现
+
+拦截层解析 HTTP 报头中的 `Cookie` 字段，提取 `filelink_session` 令牌，若合法则调用底层服务：
+
+```cpp
+// src/auth/RequestAuthenticator.cpp 中核心的识别与派发
+RequestAuthResult RequestAuthenticator::authenticate(const HttpRequest& request,
+    AuthenticatedUser& out_user) const {
+    std::string session_token;
+    // 提取并校验唯一的 Cookie 令牌
+    if (!this->session_token(request, session_token)) {
+        return RequestAuthResult::Unauthorized;
+    }
+
+    // 委派给核心服务层校验
+    switch (auth_service_.current_user(session_token, out_user)) {
+    case CurrentUserResult::Success:
+        return RequestAuthResult::Authenticated;
+    case CurrentUserResult::InvalidSession:
+        return RequestAuthResult::Unauthorized;
+    case CurrentUserResult::SystemError:
+        return RequestAuthResult::SystemError;
+    }
+    return RequestAuthResult::SystemError;
+}
+```
+
+### 2. 缓存路由与回退的实现
+
+在服务层中，校验首先尝试在 Redis 缓存中查询。如果缓存未命中或不可用，系统无缝回退到 MySQL，并在成功后回填缓存：
+
+```cpp
+// src/auth/AuthService.cpp 中 current_user 核心校验流程
+CurrentUserResult AuthService::current_user(const std::string& session_token,
+    AuthenticatedUser& out_user) {
+    if (sodium_init() < 0) return CurrentUserResult::SystemError;
+
+    std::string token;
+    if (!decode_token(session_token, token)) return CurrentUserResult::InvalidSession;
+
+    const std::string token_hash = hash_token(token);
+    std::string user_id;
+
+    // 1. 尝试使用二级缓存快速查询
+    if (session_cache_ != nullptr
+        && session_cache_->find_user_id(token_hash, user_id) == redis::CacheLookupResult::Hit) {
+        try {
+            db::SociSessionLease lease(pool_);
+            db::User user;
+            // 缓存命中也必须单表快速校验用户的软禁用状态，确保恶意账号可实时封禁
+            if (!db::UserDao(lease.get()).find_by_id(user_id, user) || user.is_disabled) {
+                session_cache_->remove(token_hash); // 强制清除脏缓存
+                return CurrentUserResult::InvalidSession;
+            }
+            out_user = {user.user_id, user.username};
+            return CurrentUserResult::Success;
+        } catch (const std::exception&) {
+            return CurrentUserResult::SystemError;
+        }
+    }
+
+    // 2. 缓存未命中或不可用时的 MySQL 降级验证
+    try {
+        db::SociSessionLease lease(pool_);
+        soci::session& sql = lease.get();
+        db::UserSession session;
+        // 在 MySQL 中验证会话有效性 (expires_at > NOW())
+        if (!db::UserSessionDao(sql).find_active(token_hash, session)) {
+            return CurrentUserResult::InvalidSession;
+        }
+
+        db::User user;
+        if (!db::UserDao(sql).find_by_id(session.user_id, user) || user.is_disabled) {
+            return CurrentUserResult::InvalidSession;
+        }
+
+        out_user = {user.user_id, user.username};
+        // 3. 库查询成功，以该会话在 MySQL 中的剩余有效秒数作为 TTL 写入 Redis 缓存
+        if (session_cache_ != nullptr) {
+            session_cache_->store_user_id(token_hash, user.user_id,
+                remaining_session_seconds(session.expires_at));
+        }
+        return CurrentUserResult::Success;
+    } catch (const std::exception&) {
+        return CurrentUserResult::SystemError;
+    }
+}
+```
+
+---
+
 ## 当前登录状态查询 (/auth/me)
 
 单页应用前端在初始化或刷新页面时，会发起 `GET /auth/me` 请求来校验当前的登录状态。该接口通过 [RequestAuthenticator](file:///home/wxm/FileLink/src/auth/RequestAuthenticator.h#L24) 尝试从 Cookie 请求头中解析并提取会话令牌，并利用 [AuthService](file:///home/wxm/FileLink/src/auth/AuthService.h#L73) 进行有效性校验。
