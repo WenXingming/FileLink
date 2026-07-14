@@ -125,29 +125,16 @@ UploadMetadata parse_upload_metadata(const std::string& header) {
     return metadata;
 }
 
-bool object_matches_upload(const ObjectStore& store, const std::string& hash_hex, uint64_t byte_size) {
-    if (hash_hex.size() != 64) {
-        return false;
-    }
-
-    struct stat info;
-    const std::string path = store.get_object_path(hash_hex);
-    return ::stat(path.c_str(), &info) == 0
-        && S_ISREG(info.st_mode)
-        && static_cast<uint64_t>(info.st_size) == byte_size;
-}
-
 db::UploadSession make_upload_session(const std::string& upload_id, const std::string& owner_user_id,
-    uint64_t total_size, const UploadMetadata& metadata, const std::string& expected_hash,
-    bool is_deduplicated) {
+    uint64_t total_size, const UploadMetadata& metadata, const std::string& expected_hash) {
     db::UploadSession session;
     session.upload_id = upload_id;
     session.owner_user_id = owner_user_id;
     session.file_name = metadata.file_name.empty() ? "upload_" + bytes_to_hex(upload_id) + ".bin"
         : metadata.file_name;
     session.total_size = total_size;
-    session.state = is_deduplicated ? "FINALIZING" : "UPLOADING";
-    session.committed_offset = is_deduplicated ? total_size : 0;
+    session.state = "UPLOADING";
+    session.committed_offset = 0;
     session.expected_hash = expected_hash;
     session.has_expected_hash = !expected_hash.empty();
     session.has_content_hash = false;
@@ -195,20 +182,18 @@ bool UploadService::create_session(const std::string& ownerUserId, uint64_t tota
     const std::string upload_id = generate_random_uuid_binary();
     const std::string expected_hash = metadata.expected_hash_hex.size() == 64
         ? hex_to_bytes(metadata.expected_hash_hex) : "";
-    const bool is_deduplicated = object_matches_upload(store_, metadata.expected_hash_hex, totalSize);
 
     out_uploadIdHex = bytes_to_hex(upload_id);
     const db::UploadSession session = make_upload_session(upload_id, ownerUserId, totalSize,
-        metadata, expected_hash, is_deduplicated);
+        metadata, expected_hash);
 
     {
         db::SociSessionLease lease(pool_);
         db::UploadSessionDao(lease.get()).create(session);
     }
 
-    if (is_deduplicated && !complete_published_session(upload_id, metadata.expected_hash_hex)) {
-        mark_session_failed(upload_id, "Failed to create logical file");
-        return false;
+    if (!expected_hash.empty()) {
+        complete_existing_session(upload_id, metadata.expected_hash_hex);
     }
     return true;
 }
@@ -337,7 +322,7 @@ void UploadService::finalize_session(std::string uploadIdHex, std::string realHa
     }
 
     // 4. Create the logical file and complete the session in one transaction.
-    if (!complete_published_session(uploadIdBinary, realHashHex)) {
+    if (!complete_newly_published_session(uploadIdBinary, realHashHex)) {
         mark_session_failed(uploadIdBinary, "Failed to create logical file");
     }
 }
@@ -515,7 +500,42 @@ bool UploadService::commit_to_object_store(const std::string& partPath, const st
     }
 }
 
-bool UploadService::complete_published_session(const std::string& uploadIdBinary,
+bool UploadService::complete_existing_session(const std::string& uploadIdBinary,
+    const std::string& realHashHex) {
+    try {
+        db::SociSessionLease lease(pool_);
+        soci::session& sql = lease.get();
+        soci::transaction transaction(sql);
+
+        db::UploadSessionDao sessionStore(sql);
+        db::UploadSession session;
+        if (!sessionStore.find(uploadIdBinary, session) || session.state != "UPLOADING") {
+            return false;
+        }
+
+        const std::string hashBytes = hex_to_bytes(realHashHex);
+        if (!db::ObjectDao(sql).try_add_existing_reference(hashBytes, session.total_size)) {
+            return false;
+        }
+
+        db::File file;
+        file.file_id = generate_random_uuid_binary();
+        file.owner_user_id = session.owner_user_id;
+        file.content_hash = hashBytes;
+        file.display_name = session.file_name;
+        db::FileDao(sql).create(file);
+
+        sessionStore.update_offset(uploadIdBinary, session.total_size);
+        sessionStore.update_completed(uploadIdBinary, hashBytes);
+        sessionStore.set_completed_file(uploadIdBinary, file.file_id);
+        transaction.commit();
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool UploadService::complete_newly_published_session(const std::string& uploadIdBinary,
     const std::string& realHashHex) {
     try {
         db::SociSessionLease lease(pool_);

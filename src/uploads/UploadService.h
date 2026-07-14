@@ -78,7 +78,9 @@ private:
     bool compute_file_hash(const std::string& partPath, std::string& out_hashHex);
     bool verify_expected_hash(const std::string& uploadIdBinary, const std::string& realHashHex);
     bool commit_to_object_store(const std::string& partPath, const std::string& realHashHex);
-    bool complete_published_session(const std::string& uploadIdBinary, const std::string& realHashHex);
+    bool complete_existing_session(const std::string& uploadIdBinary, const std::string& realHashHex);
+    bool complete_newly_published_session(const std::string& uploadIdBinary,
+        const std::string& realHashHex);
     void mark_session_failed(const std::string& uploadIdBinary, const std::string& errorMsg);
 
     // 哈希缓存与临时文件

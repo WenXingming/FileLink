@@ -21,6 +21,17 @@ ObjectReferenceResult ObjectDao::add_reference(const std::string& content_hash, 
     return ObjectReferenceResult::Referenced;
 }
 
+bool ObjectDao::try_add_existing_reference(const std::string& content_hash, uint64_t byte_size) {
+    soci::statement statement = (sql_.prepare
+        << "UPDATE objects SET ref_count = ref_count + 1, state = 'READY' "
+           "WHERE content_hash = :hash AND byte_size = :size "
+           "AND state IN ('READY', 'PENDING_DELETE')",
+        soci::use(content_hash),
+        soci::use(byte_size));
+    statement.execute(false);
+    return statement.get_affected_rows() == 1;
+}
+
 bool ObjectDao::remove_reference(const std::string& content_hash) {
     soci::statement statement = (sql_.prepare
         << "UPDATE objects "

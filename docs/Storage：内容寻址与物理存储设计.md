@@ -1,6 +1,6 @@
 # Storage：内容寻址与物理存储设计
 
-在 FileLink 系统中，[src/storage/](file:///home/wxm/FileLink/src/storage/) 模块负责底层的物理存储，是整个系统“物理去重（秒传）”与“内容寻址存储（CAS）”的基石。该模块将业务层的“逻辑文件”与底层的“物理对象”彻底解耦，使系统能够实现极高的存储空间效率与断电可靠性。
+在 FileLink 系统中，[src/storage/](file:///home/wxm/FileLink/src/storage/) 模块负责底层的物理存储，是“发布时物理去重”与“内容寻址存储（CAS）”的基石。预上传秒传由数据库判定；本模块只处理已经接收到的字节，不参与秒传业务决策。
 
 本篇文档将详细阐述 `storage` 模块的物理存储结构、原子发布机制、去重秒传流程及断电容灾设计。
 
@@ -31,7 +31,7 @@ storage/
 
 ---
 
-## 原子发布与秒传流程
+## 原子发布与物理去重流程
 
 当分片上传完成并拼接出完整的临时文件后，系统会通过硬链接（Hard Link）实现物理对象的秒传与原子发布。整个调用流转如下图所示：
 
@@ -60,12 +60,12 @@ storage/
       擦除临时文件路径引用           擦除临时文件路径引用
              │                          │
              ▼                          ▼
-      返回 Created 状态             返回 Reused 状态 (秒传成功)
+      返回 Created 状态             返回 Reused 状态（物理去重）
 ```
 
-### 硬链接秒传原理与代码实现
+### 硬链接物理去重原理与代码实现
 
-整个硬链接秒传与去重的逻辑，是由**物理存储层（`ObjectStore`）**与**上层业务服务（`UploadService`）**双层协作完成的：
+发布时物理去重由 **`ObjectStore`** 与 **`UploadService`** 协作完成。此时客户端字节已经上传完毕，因此它不同于创建会话阶段的零字节秒传：
 
 * **物理层的硬链接冲突拦截**：在 [ObjectStore.cpp](file:///home/wxm/FileLink/src/storage/ObjectStore.cpp#L130-L141) 的 `commit` 方法中，系统利用 POSIX `::link(tempPath, objectPath)` 系统调用的原子性进行判定。如果创建硬链接失败且 `errno` 报告为 `EEXIST`（表示目标哈希物理对象在系统里已存在），系统会执行 `::unlink` 擦除刚刚拼装好的多余临时文件，并向业务层返回 `CommitStatus::Reused` 状态。
 
@@ -83,10 +83,10 @@ storage/
       return CommitResult{ CommitStatus::Reused, objectPath }; // 告知上层可直接复用已有物理文件
   }
   ```
-* **业务层的引用计数与元数据装配**：在 [UploadService.cpp](file:///home/wxm/FileLink/src/uploads/UploadService.cpp#L509-L516) 判定物理层提交成功后，会在 `complete_published_session` 中启动 MySQL 事务，调用 `db::ObjectDao::add_reference` 递增该物理对象的 `reference_count` 引用计数，并在 `files` 表中插入新的逻辑文件记录，建立“逻辑 UUID 到物理 BLAKE3 哈希”的关联绑定，最后完成会话更新并提交整个事务。
+* **业务层的引用计数与元数据装配**：物理发布成功后，[UploadService.cpp](file:///home/wxm/FileLink/src/uploads/UploadService.cpp) 在 `complete_newly_published_session` 中启动 MySQL 事务，调用 `db::ObjectDao::add_reference` 登记或复用对象，创建逻辑 `File`，最后完成会话。
 
   ```cpp
-  // src/uploads/UploadService.cpp 中 complete_published_session 核心片段
+  // src/uploads/UploadService.cpp 中 complete_newly_published_session 核心片段
   db::SociSessionLease lease(pool_);
   soci::session& sql = lease.get();
   soci::transaction transaction(sql);
@@ -109,7 +109,7 @@ storage/
   transaction.commit(); // 提交事务，完成发布
   ```
 
-这种分层设计既实现了无竞态条件的极速秒传，又利用数据库的引用计数有效防止了物理对象被并发删除，确保了双端一致性。
+创建会话阶段的零字节秒传不调用 `ObjectStore`，而是通过数据库中的哈希、大小和状态原子获取既有对象引用。`ObjectStore::commit` 只保证普通上传完成后的唯一物理对象发布。
 
 ### 保证掉电一致性
 

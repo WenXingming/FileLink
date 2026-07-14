@@ -575,29 +575,15 @@ TEST_F(TusDatabaseApiTest, PostDeduplicationInstantlyCompletes) {
     UploadService uploadService(*pool, testStorage, objectStore);
     ApiRouter router(server, uploadService, *requestAuthenticator);
 
-    // 1. Prepare object in ObjectStore
-    std::string tempFile = testStorage + "/temp_instant_upload.tmp";
-    ::mkdir(testStorage.c_str(), 0755);
-    std::ofstream ofs(tempFile, std::ios::binary);
     std::string content = "instant_upload_test";
-    ofs << content;
-    ofs.close();
-
-    blake3_hasher hasher;
-    blake3_hasher_init(&hasher);
-    blake3_hasher_update(&hasher, content.data(), content.size());
-    uint8_t hashOutput[BLAKE3_OUT_LEN];
-    blake3_hasher_finalize(&hasher, hashOutput, BLAKE3_OUT_LEN);
-
-    std::stringstream ss;
-    ss << std::hex << std::setfill('0');
-    for (int i = 0; i < BLAKE3_OUT_LEN; ++i) {
-        ss << std::setw(2) << static_cast<int>(hashOutput[i]);
+    std::string expectedHash(64, 'a');
+    {
+        soci::session sql(*pool);
+        ObjectDao objects(sql);
+        ASSERT_EQ(objects.add_reference(hex_to_bytes_test(expectedHash), content.size()),
+            ObjectReferenceResult::Referenced);
+        ASSERT_TRUE(objects.remove_reference(hex_to_bytes_test(expectedHash)));
     }
-    std::string expectedHash = ss.str();
-
-    CommitResult result = objectStore.commit(tempFile, expectedHash);
-    ASSERT_EQ(result.status, CommitStatus::Created);
 
     // 2. Post creation with expected_hash matching existing object
     HttpRequest postReq;
@@ -655,8 +641,6 @@ TEST_F(TusDatabaseApiTest, PostDeduplicationInstantlyCompletes) {
         EXPECT_EQ(object.ref_count, 2u);
     }
 
-    // Clean up published object
-    ::unlink(result.objectPath.c_str());
 }
 
 TEST_F(TusDatabaseApiTest, DeleteUploadInstantlyFreesResources) {
@@ -776,29 +760,12 @@ TEST_F(TusDatabaseApiTest, PostDeduplicationRejectsIncorrectSize) {
     UploadService uploadService(*pool, testStorage, objectStore);
     ApiRouter router(server, uploadService, *requestAuthenticator);
 
-    // 1. Prepare object in ObjectStore with content "damaged" (7 bytes)
-    std::string tempFile = testStorage + "/temp_size_mismatch.tmp";
-    ::mkdir(testStorage.c_str(), 0755);
-    std::ofstream ofs(tempFile, std::ios::binary);
-    std::string content = "damaged";
-    ofs << content;
-    ofs.close();
-
-    blake3_hasher hasher;
-    blake3_hasher_init(&hasher);
-    blake3_hasher_update(&hasher, content.data(), content.size());
-    uint8_t hashOutput[BLAKE3_OUT_LEN];
-    blake3_hasher_finalize(&hasher, hashOutput, BLAKE3_OUT_LEN);
-
-    std::stringstream ss;
-    ss << std::hex << std::setfill('0');
-    for (int i = 0; i < BLAKE3_OUT_LEN; ++i) {
-        ss << std::setw(2) << static_cast<int>(hashOutput[i]);
+    std::string expectedHash(64, 'b');
+    {
+        soci::session sql(*pool);
+        ASSERT_EQ(ObjectDao(sql).add_reference(hex_to_bytes_test(expectedHash), 7),
+            ObjectReferenceResult::Referenced);
     }
-    std::string expectedHash = ss.str();
-
-    CommitResult result = objectStore.commit(tempFile, expectedHash);
-    ASSERT_EQ(result.status, CommitStatus::Created);
 
     // 2. Post creation with expected_hash matching existing object,
     //    BUT specify a different Upload-Length (100 bytes, mismatched from 7 bytes).
@@ -829,10 +796,6 @@ TEST_F(TusDatabaseApiTest, PostDeduplicationRejectsIncorrectSize) {
     EXPECT_EQ(headResp.get_headers().at("Upload-Offset"), "0"); // Not completed!
     EXPECT_EQ(headResp.get_headers().at("Upload-Length"), "100");
 
-    // Clean up
-    std::string partPath = testStorage + "/uploads/" + uuidHex + ".part";
-    ::unlink(partPath.c_str());
-    ::unlink(result.objectPath.c_str());
 }
 
 } // namespace filelink

@@ -35,6 +35,7 @@ public:
     explicit ObjectDao(soci::session& sql) : sql_(sql) {}
 
     ObjectReferenceResult add_reference(const std::string& content_hash, uint64_t byte_size);
+    bool try_add_existing_reference(const std::string& content_hash, uint64_t byte_size);
     bool remove_reference(const std::string& content_hash);
     bool claim_pending_delete(const std::string& content_hash);
     bool return_to_pending_delete(const std::string& content_hash);

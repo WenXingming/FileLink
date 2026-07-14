@@ -77,9 +77,13 @@ int ObjectReclaimer::reclaim_pending_objects() {
 
 ### 2. 竞态防御：拒绝复活已认领对象
 
-当回收器已将对象标记为 `RECLAIMING` 后，如果前端在此瞬间再次上传了相同内容的文件并尝试执行秒传，在 [ObjectDao::add_reference](file:///home/wxm/FileLink/src/database/Object.cpp#L8) 中，数据库会拦截这一操作：
-* `add_reference` 判定如果对象处于 `RECLAIMING` 状态，则不会对其进行 `ref_count + 1`，而是直接返回 `Reclaiming` 失败状态。
-* 业务层收到失败后，会将会话标记为 `FAILED`，引导前端转为正常的重新上传，而绝不会在磁盘文件被物理擦除的瞬间，将一个空引用文件绑定给新用户，从底层保障了数据绝对不丢失。
+创建上传会话时，[ObjectDao::try_add_existing_reference](file:///home/wxm/FileLink/src/database/Object.cpp) 使用一条条件更新完成秒传判定和引用获取：
+
+* `READY` 或 `PENDING_DELETE` 且大小匹配时，引用数加一并将状态置为 `READY`。
+* `RECLAIMING`、记录不存在或大小不匹配时，更新不到记录，不会增加引用。
+* 秒传未命中时 UploadSession 保持 `UPLOADING`，客户端继续普通分片上传，而不是进入 `FAILED`。
+
+因此数据库状态既是秒传的业务事实来源，也是秒传与物理回收之间的并发仲裁点。
 
 ---
 

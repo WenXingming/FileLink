@@ -827,6 +827,7 @@ function finishUpload() {
 // Tus Protocol implementation
 async function startTusUpload(file) {
     const fingerprint = `tus:${file.name}-${file.size}-${file.lastModified}`;
+    const totalSize = file.size;
     let sessionUrl = null;
     
     try {
@@ -852,7 +853,7 @@ async function startTusUpload(file) {
             try {
                 localStorage.setItem(fingerprint, sessionUrl);
             } catch (_) {}
-            offset = 0;
+            offset = await getTusSessionOffset(sessionUrl);
         } catch (e) {
             showError('初始化上传会话失败: ' + e.message);
             finishUpload();
@@ -861,7 +862,6 @@ async function startTusUpload(file) {
     }
 
     const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunk
-    const totalSize = file.size;
 
     while (offset < totalSize && !isCancelled && !isPaused) {
         const chunkEnd = Math.min(offset + CHUNK_SIZE, totalSize);

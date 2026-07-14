@@ -44,6 +44,49 @@ TEST_F(ObjectDaoTest, AddsReferencesAndFindsObject) {
     EXPECT_FALSE(objects.find("abcdefghijklmnopqrstuvwxzy123456", found));
 }
 
+TEST_F(ObjectDaoTest, AddsReferenceOnlyToMatchingExistingObject) {
+    filelink::db::ObjectDao objects(sql_);
+    const std::string content_hash = "12345678901234567890123456789012";
+    const std::string missing_hash = "abcdefghijklmnopqrstuvwxzy123456";
+
+    filelink::db::Object missing;
+    EXPECT_FALSE(objects.try_add_existing_reference(missing_hash, 42));
+    EXPECT_FALSE(objects.find(missing_hash, missing));
+
+    ASSERT_EQ(objects.add_reference(content_hash, 42),
+        filelink::db::ObjectReferenceResult::Referenced);
+    EXPECT_FALSE(objects.try_add_existing_reference(content_hash, 43));
+    EXPECT_TRUE(objects.try_add_existing_reference(content_hash, 42));
+
+    filelink::db::Object found;
+    ASSERT_TRUE(objects.find(content_hash, found));
+    EXPECT_EQ(found.ref_count, 2u);
+    EXPECT_EQ(found.state, "READY");
+}
+
+TEST_F(ObjectDaoTest, RevivesPendingObjectButNotReclaimingObject) {
+    filelink::db::ObjectDao objects(sql_);
+    const std::string content_hash = "12345678901234567890123456789012";
+
+    ASSERT_EQ(objects.add_reference(content_hash, 42),
+        filelink::db::ObjectReferenceResult::Referenced);
+    ASSERT_TRUE(objects.remove_reference(content_hash));
+    ASSERT_TRUE(objects.try_add_existing_reference(content_hash, 42));
+
+    filelink::db::Object found;
+    ASSERT_TRUE(objects.find(content_hash, found));
+    EXPECT_EQ(found.ref_count, 1u);
+    EXPECT_EQ(found.state, "READY");
+
+    ASSERT_TRUE(objects.remove_reference(content_hash));
+    ASSERT_TRUE(objects.claim_pending_delete(content_hash));
+    EXPECT_FALSE(objects.try_add_existing_reference(content_hash, 42));
+
+    ASSERT_TRUE(objects.find(content_hash, found));
+    EXPECT_EQ(found.ref_count, 0u);
+    EXPECT_EQ(found.state, "RECLAIMING");
+}
+
 TEST_F(ObjectDaoTest, ClaimsAndReleasesPendingDeletionObject) {
     filelink::db::ObjectDao objects(sql_);
     const std::string content_hash = "12345678901234567890123456789012";
