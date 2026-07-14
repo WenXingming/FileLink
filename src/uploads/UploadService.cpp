@@ -1,8 +1,8 @@
 #include "uploads/UploadService.h"
-#include "db/File.h"
-#include "db/Object.h"
-#include "db/SociSessionLease.h"
-#include "db/UploadSession.h"
+#include "database/File.h"
+#include "database/Object.h"
+#include "database/SociSessionLease.h"
+#include "database/UploadSession.h"
 #include <soci/soci.h>
 #include <soci/connection-pool.h>
 #include <utility>

@@ -1,5 +1,5 @@
 #include "MySqlTestConfig.h"
-#include "db/Object.h"
+#include "database/Object.h"
 
 #include <gtest/gtest.h>
 

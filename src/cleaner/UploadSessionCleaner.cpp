@@ -1,6 +1,6 @@
 #include "UploadSessionCleaner.h"
 
-#include "db/SociSessionLease.h"
+#include "database/SociSessionLease.h"
 
 #include <cerrno>
 #include <iomanip>

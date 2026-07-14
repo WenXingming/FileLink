@@ -1,7 +1,7 @@
 #include "MySqlTestConfig.h"
 #include "ObjectStore.h"
 #include "cleaner/ObjectReclaimer.h"
-#include "db/Object.h"
+#include "database/Object.h"
 
 #include <gtest/gtest.h>
 

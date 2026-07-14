@@ -7,9 +7,9 @@
 #include "tudou/http/HttpServer.h"
 #include "tudou/http/HttpRequest.h"
 #include "tudou/http/HttpResponse.h"
-#include "db/UploadSession.h"
-#include "db/File.h"
-#include "db/Object.h"
+#include "database/UploadSession.h"
+#include "database/File.h"
+#include "database/Object.h"
 #include <soci/soci.h>
 #include <soci/connection-pool.h>
 #include <soci/mysql/soci-mysql.h>

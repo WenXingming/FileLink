@@ -1,7 +1,7 @@
 #include "FileService.h"
 
-#include "db/Object.h"
-#include "db/SociSessionLease.h"
+#include "database/Object.h"
+#include "database/SociSessionLease.h"
 
 #include <iomanip>
 #include <sstream>

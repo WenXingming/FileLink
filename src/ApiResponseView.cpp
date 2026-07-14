@@ -1,5 +1,5 @@
 #include "ApiResponseView.h"
-#include "db/UploadSession.h"
+#include "database/UploadSession.h"
 #include <sstream>
 #include <iomanip>
 

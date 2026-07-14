@@ -2,7 +2,7 @@
 #include "MySqlTestConfig.h"
 #include "auth/PasswordHasher.h"
 #include "cache/RedisSessionCache.h"
-#include "db/User.h"
+#include "database/User.h"
 
 #include <gtest/gtest.h>
 

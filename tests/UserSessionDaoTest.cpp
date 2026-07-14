@@ -1,6 +1,6 @@
 #include "MySqlTestConfig.h"
-#include "db/User.h"
-#include "db/UserSession.h"
+#include "database/User.h"
+#include "database/UserSession.h"
 
 #include <gtest/gtest.h>
 

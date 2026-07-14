@@ -1,8 +1,8 @@
 #include "MySqlTestConfig.h"
 #include "shares/ShareService.h"
-#include "db/File.h"
-#include "db/Object.h"
-#include "db/User.h"
+#include "database/File.h"
+#include "database/Object.h"
+#include "database/User.h"
 
 #include <gtest/gtest.h>
 

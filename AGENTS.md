@@ -2,9 +2,9 @@
 
 ## Project Structure & Module Organization
 
-`src/` contains the C++14 service. `main.cpp` is the composition root; routing, upload/download services, configuration, and content-addressed storage live alongside it. Database models and data access objects are in `src/db/`, while background cleanup and deduplication work is in `src/cleaner/`. Keep new production code close to its owning module and add its header beside its implementation.
+`src/` contains the C++14 service. `main.cpp` is the composition root; routing, upload/download services, configuration, and content-addressed storage live alongside it. Database models and data access objects are in `src/database/`, while background cleanup and deduplication work is in `src/cleaner/`. Keep new production code close to its owning module and add its header beside its implementation.
 
-`tests/` holds GoogleTest unit and integration sources plus shell-based HTTP checks. `config/` contains server and Nginx configuration, `db/migrations/` contains ordered SQL migrations, `web/` holds the static UI, and `docs/` records design decisions. Do not commit generated `build/`, runtime storage, logs, or `.env` credentials.
+`tests/` holds GoogleTest unit and integration sources plus shell-based HTTP checks. `config/` contains server and Nginx configuration, `database/migrations/` contains ordered SQL migrations, `web/` holds the static UI, and `docs/` records design decisions. Do not commit generated `build/`, runtime storage, logs, or `.env` credentials.
 
 ## Build, Test, and Development Commands
 

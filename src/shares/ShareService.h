@@ -1,7 +1,7 @@
 #pragma once
 
-#include "db/File.h"
-#include "db/Share.h"
+#include "database/File.h"
+#include "database/Share.h"
 
 #include <ctime>
 #include <string>

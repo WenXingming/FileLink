@@ -1,7 +1,7 @@
 #include "ShareService.h"
 
-#include "db/File.h"
-#include "db/SociSessionLease.h"
+#include "database/File.h"
+#include "database/SociSessionLease.h"
 
 #include <soci/soci.h>
 #include <sodium.h>

@@ -2,9 +2,9 @@
 
 #include "PasswordHasher.h"
 #include "cache/RedisSessionCache.h"
-#include "db/SociSessionLease.h"
-#include "db/User.h"
-#include "db/UserSession.h"
+#include "database/SociSessionLease.h"
+#include "database/User.h"
+#include "database/UserSession.h"
 
 #include <soci/connection-pool.h>
 #include <soci/soci.h>

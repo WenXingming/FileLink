@@ -56,10 +56,10 @@ services:
     environment:
       # dbmate 只接受数据库 URL；开发密码应使用 URL-safe 字符。
       DATABASE_URL: "mysql://filelink:${FILELINK_MYSQL_PASSWORD:?FILELINK_MYSQL_PASSWORD 未设置}@mysql:3306/filelink"
-      DBMATE_MIGRATIONS_DIR: /db/migrations
+      DBMATE_MIGRATIONS_DIR: /database/migrations
       DBMATE_NO_DUMP_SCHEMA: "true"
     volumes:
-      - ./db/migrations:/db/migrations:ro
+      - ./database/migrations:/database/migrations:ro
     command: ["--wait", "migrate"]
 
   # ===============================================================================================

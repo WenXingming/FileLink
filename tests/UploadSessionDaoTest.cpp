@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
 #include "MySqlTestConfig.h"
-#include "db/UploadSession.h"
-#include "db/File.h"
-#include "db/Object.h"
-#include "db/User.h"
+#include "database/UploadSession.h"
+#include "database/File.h"
+#include "database/Object.h"
+#include "database/User.h"
 #include "cleaner/UploadSessionCleaner.h"
 #include <soci/soci.h>
 #include <soci/mysql/soci-mysql.h>

@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "db/MySqlConfig.h"
+#include "database/MySqlConfig.h"
 #include "cache/RedisConfig.h"
 
 namespace filelink {

@@ -8,7 +8,7 @@
 #include <exception>
 #include <utility>
 
-#include "db/UploadSession.h"
+#include "database/UploadSession.h"
 
 namespace filelink {
 
