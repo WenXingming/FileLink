@@ -22,7 +22,6 @@ struct AppConfig {
     bool reclaimPendingObjectsOnly = false;
     bool scanOrphanedObjectsOnly = false;
     bool reclaimOrphanedObjectsOnly = false;
-    bool runDedupOnly = false;
 
     db::MySqlConfig mysql;
 };

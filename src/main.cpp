@@ -12,7 +12,6 @@
 #include "cleaner/UploadSessionCleaner.h"
 #include "cleaner/ObjectOrphanReclaimer.h"
 #include "cleaner/ObjectReclaimer.h"
-#include "cleaner/DedupRunner.h"
 #include "tudou/http/HttpServer.h"
 #include <soci/soci.h>
 #include <soci/connection-pool.h>
@@ -80,13 +79,6 @@ int main(int argc, char* argv[]) {
             filelink::ObjectOrphanReclaimer reclaimer(mysqlPool, config.storageRoot);
             const int count = reclaimer.reclaim_orphaned_objects();
             std::cout << "Successfully reclaimed " << count << " orphaned objects.\n";
-            return 0;
-        }
-
-        if (config.runDedupOnly) {
-            filelink::DedupRunner runner(config.storageRoot);
-            int count = runner.run_dedup();
-            std::cout << "Successfully merged " << count << " duplicate files.\n";
             return 0;
         }
 

@@ -8,10 +8,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(FetchContent)
 
-option(FILELINK_BUILD_DEDUP_TOOL "构建离线去重命令行工具" ON)
 option(FILELINK_BUILD_TESTS "构建不依赖外部服务的单元测试" OFF)
 option(FILELINK_BUILD_INTEGRATION_TESTS "构建需要 MySQL 或运行服务的集成测试" OFF)
-option(FILELINK_BUILD_BENCHMARKS "构建当前稳定模块的性能基准" OFF)
 
 # FileLink 测试由 FILELINK_BUILD_TESTS 控制，不把第三方项目的测试混入 CTest。
 set(BUILD_TESTING OFF CACHE BOOL "构建第三方依赖的测试" FORCE)
@@ -20,17 +18,6 @@ set(BUILD_TESTING OFF CACHE BOOL "构建第三方依赖的测试" FORCE)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MySQLClient REQUIRED IMPORTED_TARGET mysqlclient)
 pkg_check_modules(Sodium REQUIRED IMPORTED_TARGET libsodium)
-
-# 离线文件去重引擎由独立的 FileSystemTools 提供。
-if(NOT TARGET dedup_lib)
-    FetchContent_Declare(
-        FileSystemTools
-        GIT_REPOSITORY https://github.com/WenXingming/FileSystemTools.git
-        GIT_TAG develop
-        GIT_SHALLOW TRUE
-    )
-    FetchContent_MakeAvailable(FileSystemTools)
-endif()
 
 # 优先使用系统中的 BLAKE3，未找到时获取官方 C 实现。
 if(NOT TARGET BLAKE3::blake3 AND NOT TARGET blake3)
@@ -126,8 +113,4 @@ if(FILELINK_BUILD_TESTS OR FILELINK_BUILD_INTEGRATION_TESTS)
     endif()
 
     add_subdirectory(tests)
-endif()
-
-if(FILELINK_BUILD_BENCHMARKS)
-    # add_subdirectory(benchmarks/dedup)
 endif()

@@ -30,7 +30,6 @@ AppConfig parse_app_config(const std::vector<std::string>& args) {
         "离线扫描没有 objects 记录的对象文件并退出");
     app.add_flag("--reclaim-orphaned-objects", config.reclaimOrphanedObjectsOnly,
         "离线删除没有 objects 记录的对象文件并退出");
-    app.add_flag("--dedup", config.runDedupOnly, "仅对存储目录进行重复文件扫描与硬链接合并并退出");
 
     // MySQL 配置
     app.add_option("--mysql-host", config.mysql.host, "MySQL 主机地址");

@@ -28,7 +28,6 @@ if(FILELINK_BUILD_INTEGRATION_TESTS)
         UserSessionDaoTest.cpp
         AuthServiceTest.cpp
         AuthApiTest.cpp
-        DedupRunnerTest.cpp
         ObjectOrphanReclaimerTest.cpp
         ObjectReclaimerTest.cpp
     )
