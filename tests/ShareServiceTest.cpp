@@ -93,3 +93,33 @@ TEST_F(ShareServiceTest, RejectsPastExpiryAndFilesNotOwnedByCaller) {
             std::time(nullptr) + 3600, created),
         filelink::CreateShareResult::FileNotFound);
 }
+
+TEST_F(ShareServiceTest, FindsOnlyFilesGrantedByActiveTokens) {
+    filelink::ShareService shares(pool_);
+    filelink::CreatedShare active_share;
+    ASSERT_EQ(shares.create_share("share-owner-id01", "share-file-id-01",
+            std::time(nullptr) + 3600, active_share),
+        filelink::CreateShareResult::Success);
+
+    filelink::db::File file;
+    EXPECT_TRUE(shares.find_shared_file(active_share.token, file));
+    EXPECT_EQ(file.file_id, "share-file-id-01");
+    EXPECT_EQ(file.display_name, "report.pdf");
+    EXPECT_FALSE(shares.find_shared_file("not-a-share-token", file));
+
+    ASSERT_EQ(shares.revoke_share("share-owner-id01", "share-file-id-01", active_share.share_id),
+        filelink::RevokeShareResult::Success);
+    EXPECT_FALSE(shares.find_shared_file(active_share.token, file));
+
+    filelink::CreatedShare expired_share;
+    ASSERT_EQ(shares.create_share("share-owner-id01", "share-file-id-01",
+            std::time(nullptr) + 3600, expired_share),
+        filelink::CreateShareResult::Success);
+    {
+        soci::session sql(pool_);
+        sql << "UPDATE shares SET expires_at = DATE_SUB(NOW(6), INTERVAL 1 SECOND) "
+               "WHERE share_id = :share_id",
+            soci::use(expired_share.share_id);
+    }
+    EXPECT_FALSE(shares.find_shared_file(expired_share.token, file));
+}

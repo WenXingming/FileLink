@@ -21,7 +21,7 @@ struct File {
 };
 
 // =================================================================
-// FileDao：创建逻辑文件，并按所有者读取其文件列表。
+// FileDao：创建、查询和删除逻辑文件。
 // =================================================================
 class FileDao {
 public:
@@ -29,6 +29,7 @@ public:
 
     void create(const File& file);
     void find_by_owner(const std::string& owner_user_id, std::vector<File>& out_files);
+    bool find_by_id(const std::string& file_id, File& out_file);
     bool find_by_id_and_owner(const std::string& file_id, const std::string& owner_user_id,
         File& out_file);
     bool remove_by_id_and_owner(const std::string& file_id, const std::string& owner_user_id);

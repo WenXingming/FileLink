@@ -33,6 +33,20 @@ std::string encode_token(const std::string& token) {
     return encoded.data();
 }
 
+bool decode_token(const std::string& encoded, std::string& out_token) {
+    if (encoded.size() != crypto_generichash_BYTES * 2) {
+        return false;
+    }
+
+    std::string token(crypto_generichash_BYTES, '\0');
+    if (sodium_hex2bin(reinterpret_cast<unsigned char*>(&token[0]), token.size(),
+            encoded.data(), encoded.size(), nullptr, nullptr, nullptr) != 0) {
+        return false;
+    }
+    out_token = token;
+    return true;
+}
+
 std::tm local_time(std::time_t value) {
     std::tm result{};
     localtime_r(&value, &result);
@@ -90,6 +104,29 @@ bool ShareService::list_shares(const std::string& owner_user_id,
 
     db::ShareDao(sql).find_active_by_file_id(file_id, out_shares);
     return true;
+}
+
+bool ShareService::find_shared_file(const std::string& token, db::File& out_file) {
+    if (sodium_init() < 0) {
+        return false;
+    }
+
+    std::string raw_token;
+    if (!decode_token(token, raw_token)) {
+        return false;
+    }
+
+    try {
+        db::SociSessionLease lease(pool_);
+        soci::session& sql = lease.get();
+        db::Share share;
+        if (!db::ShareDao(sql).find_active_by_token_hash(hash_token(raw_token), share)) {
+            return false;
+        }
+        return db::FileDao(sql).find_by_id(share.file_id, out_file);
+    } catch (const std::exception&) {
+        return false;
+    }
 }
 
 RevokeShareResult ShareService::revoke_share(const std::string& owner_user_id,

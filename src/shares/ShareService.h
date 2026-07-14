@@ -1,5 +1,6 @@
 #pragma once
 
+#include "db/File.h"
 #include "db/Share.h"
 
 #include <ctime>
@@ -55,6 +56,7 @@ public:
     bool list_shares(const std::string& owner_user_id,
         const std::string& file_id,
         std::vector<db::Share>& out_shares);
+    bool find_shared_file(const std::string& token, db::File& out_file);
     RevokeShareResult revoke_share(const std::string& owner_user_id,
         const std::string& file_id,
         const std::string& share_id);

@@ -31,6 +31,21 @@ void FileDao::find_by_owner(const std::string& owner_user_id, std::vector<File>&
     }
 }
 
+bool FileDao::find_by_id(const std::string& file_id, File& out_file) {
+    soci::indicator result_ind;
+
+    sql_ << "SELECT file_id, owner_user_id, content_hash, display_name, created_at "
+            "FROM files WHERE file_id = :file_id",
+            soci::into(out_file.file_id, result_ind),
+            soci::into(out_file.owner_user_id),
+            soci::into(out_file.content_hash),
+            soci::into(out_file.display_name),
+            soci::into(out_file.created_at),
+            soci::use(file_id);
+
+    return result_ind == soci::i_ok;
+}
+
 bool FileDao::find_by_id_and_owner(const std::string& file_id, const std::string& owner_user_id,
     File& out_file) {
     soci::indicator result_ind;
