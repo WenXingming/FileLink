@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "database/MySqlConfig.h"
-#include "cache/RedisConfig.h"
+#include "redis/RedisConfig.h"
 
 namespace filelink {
 
@@ -25,7 +25,7 @@ struct AppConfig {
     bool reclaimOrphanedObjectsOnly = false;
 
     db::MySqlConfig mysql;
-    cache::RedisConfig redis;
+    redis::RedisConfig redis;
 };
 
 AppConfig parse_app_config(const std::vector<std::string>& args);

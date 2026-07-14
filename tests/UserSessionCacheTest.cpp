@@ -1,4 +1,4 @@
-#include "cache/RedisSessionCache.h"
+#include "redis/UserSessionCache.h"
 
 #include <gtest/gtest.h>
 
@@ -7,7 +7,7 @@
 namespace filelink {
 namespace {
 
-bool redis_test_config(cache::RedisConfig& out_config) {
+bool redis_test_config(redis::RedisConfig& out_config) {
     const char* port = std::getenv("FILELINK_TEST_REDIS_PORT");
     if (port == nullptr || port[0] == '\0') {
         return false;
@@ -20,26 +20,26 @@ bool redis_test_config(cache::RedisConfig& out_config) {
 
 } // namespace
 
-TEST(RedisSessionCacheTest, StoresReadsAndRemovesHashedSessionMappings) {
-    cache::RedisConfig config;
+TEST(UserSessionCacheTest, StoresReadsAndRemovesHashedSessionMappings) {
+    redis::RedisConfig config;
     if (!redis_test_config(config)) {
         GTEST_SKIP() << "set FILELINK_TEST_REDIS_PORT to run Redis integration coverage";
     }
 
-    cache::RedisSessionCache session_cache(config);
+    redis::UserSessionCache session_cache(config);
     const std::string token_hash(32, 't');
     const std::string user_id(16, 'u');
     std::string cached_user_id;
 
     session_cache.remove(token_hash);
-    EXPECT_EQ(session_cache.find_user_id(token_hash, cached_user_id), cache::CacheLookupResult::Miss);
+    EXPECT_EQ(session_cache.find_user_id(token_hash, cached_user_id), redis::CacheLookupResult::Miss);
 
     session_cache.store_user_id(token_hash, user_id, 60);
-    EXPECT_EQ(session_cache.find_user_id(token_hash, cached_user_id), cache::CacheLookupResult::Hit);
+    EXPECT_EQ(session_cache.find_user_id(token_hash, cached_user_id), redis::CacheLookupResult::Hit);
     EXPECT_EQ(cached_user_id, user_id);
 
     session_cache.remove(token_hash);
-    EXPECT_EQ(session_cache.find_user_id(token_hash, cached_user_id), cache::CacheLookupResult::Miss);
+    EXPECT_EQ(session_cache.find_user_id(token_hash, cached_user_id), redis::CacheLookupResult::Miss);
 }
 
 } // namespace filelink

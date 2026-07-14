@@ -1,7 +1,7 @@
 #include "AuthService.h"
 
 #include "PasswordHasher.h"
-#include "cache/RedisSessionCache.h"
+#include "redis/UserSessionCache.h"
 #include "database/SociSessionLease.h"
 #include "database/User.h"
 #include "database/UserSession.h"
@@ -179,7 +179,7 @@ CurrentUserResult AuthService::current_user(const std::string& session_token,
     const std::string token_hash = hash_token(token);
     std::string user_id;
     if (session_cache_ != nullptr
-        && session_cache_->find_user_id(token_hash, user_id) == cache::CacheLookupResult::Hit) {
+        && session_cache_->find_user_id(token_hash, user_id) == redis::CacheLookupResult::Hit) {
         try {
             db::SociSessionLease lease(pool_);
             db::User user;

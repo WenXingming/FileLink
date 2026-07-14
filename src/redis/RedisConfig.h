@@ -4,7 +4,7 @@
 #include <string>
 
 namespace filelink {
-namespace cache {
+namespace redis {
 
 // =============================================================
 // RedisConfig：连接 Redis 会话缓存所需的运行时配置。
@@ -16,5 +16,5 @@ struct RedisConfig {
     unsigned int timeoutMilliseconds = 100;
 };
 
-} // namespace cache
+} // namespace redis
 } // namespace filelink

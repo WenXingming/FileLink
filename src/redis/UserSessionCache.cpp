@@ -1,4 +1,4 @@
-#include "RedisSessionCache.h"
+#include "UserSessionCache.h"
 
 #include <hiredis/hiredis.h>
 
@@ -6,7 +6,7 @@
 #include <utility>
 
 namespace filelink {
-namespace cache {
+namespace redis {
 
 namespace {
 
@@ -51,12 +51,12 @@ std::string cache_key(const std::string& token_hash) {
 
 } // namespace
 
-RedisSessionCache::~RedisSessionCache() {
+UserSessionCache::~UserSessionCache() {
     std::lock_guard<std::mutex> lock(mutex_);
     reset_connection_locked();
 }
 
-CacheLookupResult RedisSessionCache::find_user_id(const std::string& token_hash,
+CacheLookupResult UserSessionCache::find_user_id(const std::string& token_hash,
     std::string& out_user_id) {
     if (!config_.enabled || token_hash.size() != 32) {
         return CacheLookupResult::Unavailable;
@@ -86,7 +86,7 @@ CacheLookupResult RedisSessionCache::find_user_id(const std::string& token_hash,
     return CacheLookupResult::Hit;
 }
 
-void RedisSessionCache::store_user_id(const std::string& token_hash,
+void UserSessionCache::store_user_id(const std::string& token_hash,
     const std::string& user_id,
     unsigned int ttl_seconds) {
     if (!config_.enabled || token_hash.size() != 32 || user_id.size() != 16 || ttl_seconds == 0) {
@@ -110,7 +110,7 @@ void RedisSessionCache::store_user_id(const std::string& token_hash,
     }
 }
 
-void RedisSessionCache::remove(const std::string& token_hash) {
+void UserSessionCache::remove(const std::string& token_hash) {
     if (!config_.enabled || token_hash.size() != 32) {
         return;
     }
@@ -130,7 +130,7 @@ void RedisSessionCache::remove(const std::string& token_hash) {
     }
 }
 
-redisContext* RedisSessionCache::connection_locked() {
+redisContext* UserSessionCache::connection_locked() {
     if (context_ != nullptr) {
         return context_;
     }
@@ -147,12 +147,12 @@ redisContext* RedisSessionCache::connection_locked() {
     return context_;
 }
 
-void RedisSessionCache::reset_connection_locked() {
+void UserSessionCache::reset_connection_locked() {
     if (context_ != nullptr) {
         redisFree(context_);
         context_ = nullptr;
     }
 }
 
-} // namespace cache
+} // namespace redis
 } // namespace filelink

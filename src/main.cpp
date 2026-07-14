@@ -4,7 +4,7 @@
 #include "auth/AuthApiRouter.h"
 #include "auth/AuthService.h"
 #include "auth/RequestAuthenticator.h"
-#include "cache/RedisSessionCache.h"
+#include "redis/UserSessionCache.h"
 #include "files/FileApiRouter.h"
 #include "files/FileService.h"
 #include "shares/ShareApiRouter.h"
@@ -87,7 +87,7 @@ int main(int argc, char* argv[]) {
 
         // 初始化上传业务服务
         filelink::UploadService uploadService(mysqlPool, config.storageRoot, filelink::ObjectStore(config.storageRoot));
-        filelink::cache::RedisSessionCache redisSessionCache(config.redis);
+        filelink::redis::UserSessionCache redisSessionCache(config.redis);
         filelink::AuthService authService(mysqlPool, &redisSessionCache);
         filelink::RequestAuthenticator requestAuthenticator(authService);
         filelink::FileService fileService(mysqlPool, filelink::ObjectStore(config.storageRoot));

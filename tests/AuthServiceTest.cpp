@@ -1,7 +1,7 @@
 #include "auth/AuthService.h"
 #include "MySqlTestConfig.h"
 #include "auth/PasswordHasher.h"
-#include "cache/RedisSessionCache.h"
+#include "redis/UserSessionCache.h"
 #include "database/User.h"
 
 #include <gtest/gtest.h>
@@ -126,7 +126,7 @@ TEST_F(AuthServiceTest, FindsCurrentUserFromActiveSession) {
 }
 
 TEST_F(AuthServiceTest, FallsBackToMySqlWhenRedisCacheIsDisabled) {
-    filelink::cache::RedisSessionCache cache({});
+    filelink::redis::UserSessionCache cache({});
     filelink::AuthService auth(pool_, &cache);
     filelink::AuthenticatedSession session;
     ASSERT_EQ(auth.register_user("alice", "correct-password", session),
@@ -201,10 +201,10 @@ TEST_F(AuthServiceTest, RedisCacheDoesNotKeepLoggedOutSessionAuthenticated) {
         GTEST_SKIP() << "set FILELINK_TEST_REDIS_PORT to run Redis integration coverage";
     }
 
-    filelink::cache::RedisConfig config;
+    filelink::redis::RedisConfig config;
     config.enabled = true;
     config.port = static_cast<uint16_t>(std::strtoul(redis_port, nullptr, 10));
-    filelink::cache::RedisSessionCache cache(config);
+    filelink::redis::UserSessionCache cache(config);
     filelink::AuthService auth(pool_, &cache);
     filelink::AuthenticatedSession session;
     ASSERT_EQ(auth.register_user("alice", "correct-password", session),
