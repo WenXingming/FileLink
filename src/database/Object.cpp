@@ -5,12 +5,20 @@
 namespace filelink {
 namespace db {
 
-void ObjectDao::add_reference(const std::string& content_hash, uint64_t byte_size) {
+ObjectReferenceResult ObjectDao::add_reference(const std::string& content_hash, uint64_t byte_size) {
     sql_ << "INSERT INTO objects (content_hash, byte_size, ref_count, state) "
             "VALUES (:hash, :size, 1, 'READY') "
-            "ON DUPLICATE KEY UPDATE ref_count = ref_count + 1, state = 'READY'",
+            "ON DUPLICATE KEY UPDATE "
+            "ref_count = CASE WHEN state = 'RECLAIMING' THEN ref_count ELSE ref_count + 1 END, "
+            "state = CASE WHEN state = 'RECLAIMING' THEN state ELSE 'READY' END",
             soci::use(content_hash),
             soci::use(byte_size);
+
+    Object object;
+    if (!find(content_hash, object) || object.state == "RECLAIMING") {
+        return ObjectReferenceResult::Reclaiming;
+    }
+    return ObjectReferenceResult::Referenced;
 }
 
 bool ObjectDao::remove_reference(const std::string& content_hash) {

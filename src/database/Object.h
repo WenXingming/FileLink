@@ -9,6 +9,14 @@
 namespace filelink {
 namespace db {
 
+// =====================================================================
+// ObjectReferenceResult：为 Object 增加逻辑文件引用后的处理结果。
+// =====================================================================
+enum class ObjectReferenceResult {
+    Referenced,
+    Reclaiming
+};
+
 // ================================================================
 // Object：内容寻址存储中唯一、不可变的物理字节对象。
 // ================================================================
@@ -26,7 +34,7 @@ class ObjectDao {
 public:
     explicit ObjectDao(soci::session& sql) : sql_(sql) {}
 
-    void add_reference(const std::string& content_hash, uint64_t byte_size);
+    ObjectReferenceResult add_reference(const std::string& content_hash, uint64_t byte_size);
     bool remove_reference(const std::string& content_hash);
     bool claim_pending_delete(const std::string& content_hash);
     bool return_to_pending_delete(const std::string& content_hash);

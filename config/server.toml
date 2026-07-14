@@ -1,19 +1,30 @@
-address = "0.0.0.0"
-port = 18081
-io-threads = 1
+# =====================================================================
+# FileLink 团队文件分发与存储平台 配置文件 (server.toml)
+# =====================================================================
 
-storage-root = "storage"
-web-root = "web"
-log-root = "logs"
+# 服务监听配置
+address = "0.0.0.0"                 # 服务监听的网卡地址，"0.0.0.0" 表示监听所有网卡
+port = 18081                        # 服务监听端口
+io-threads = 1                      # I/O 线程数（0 表示根据 CPU 核心数自动选择）
 
-mysql-host = "127.0.0.1"
-mysql-port = 3306
-mysql-user = "filelink"
-mysql-database = "filelink"
-mysql-connect-timeout-seconds = 5
+# 目录与存储路径配置
+storage-root = "storage"            # 物理对象与分片上传的本地存储根目录
+web-root = "web"                    # 前端静态资源（HTML/CSS/JS）的主目录
+log-root = "logs"                   # 日志输出目录
 
-# 启用后使用 Redis 缓存会话哈希到用户 ID 的映射；Redis 故障时自动回退 MySQL。
-redis-enabled = false
-redis-host = "127.0.0.1"
-redis-port = 6379
-redis-timeout-milliseconds = 100
+# MySQL 数据库配置
+mysql-host = "127.0.0.1"             # 数据库主机 IP 地址
+mysql-port = 3306                    # 数据库端口号
+mysql-user = "filelink"              # 数据库用户名
+mysql-database = "filelink"          # 数据库名
+mysql-connect-timeout-seconds = 5    # 连接建立超时时间（秒）
+mysql-pool-size = 5                  # MySQL 连接池大小 (SOCI)
+
+# ⚠️ 注意：出于安全性考虑，数据库密码 (mysql-password) 禁止写入 TOML 文件！
+# 必须通过环境变量 FILELINK_MYSQL_PASSWORD 或命令行参数 --mysql-password 传递。
+
+# Redis 会话缓存配置（启用后，会话数据将优先缓存于 Redis，实现无状态扩展）
+redis-enabled = false                # 是否启用 Redis 缓存
+redis-host = "127.0.0.1"             # Redis 主机地址
+redis-port = 6379                    # Redis 端口号
+redis-timeout-milliseconds = 100     # Redis 连接与命令执行的超时时间（毫秒）

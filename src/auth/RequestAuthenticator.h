@@ -19,7 +19,7 @@ enum class RequestAuthResult {
 };
 
 // =================================================================
-// RequestAuthenticator：从 Cookie 提取会话令牌，并解析当前认证用户。
+// RequestAuthenticator：HTTP 请求拦截鉴权。从 Cookie 提取会话令牌，并解析当前认证用户。
 // =================================================================
 class RequestAuthenticator {
 public:

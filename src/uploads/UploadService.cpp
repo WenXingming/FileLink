@@ -529,7 +529,10 @@ bool UploadService::complete_published_session(const std::string& uploadIdBinary
         }
 
         const std::string hashBytes = hex_to_bytes(realHashHex);
-        db::ObjectDao(sql).add_reference(hashBytes, session.total_size);
+        if (db::ObjectDao(sql).add_reference(hashBytes, session.total_size)
+            == db::ObjectReferenceResult::Reclaiming) {
+            return false;
+        }
 
         db::File file;
         file.file_id = generate_random_uuid_binary();

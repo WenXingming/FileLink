@@ -32,8 +32,8 @@ TEST_F(ObjectDaoTest, AddsReferencesAndFindsObject) {
     filelink::db::ObjectDao objects(sql_);
     const std::string content_hash = "12345678901234567890123456789012";
 
-    objects.add_reference(content_hash, 42);
-    objects.add_reference(content_hash, 42);
+    EXPECT_EQ(objects.add_reference(content_hash, 42), filelink::db::ObjectReferenceResult::Referenced);
+    EXPECT_EQ(objects.add_reference(content_hash, 42), filelink::db::ObjectReferenceResult::Referenced);
 
     filelink::db::Object found;
     ASSERT_TRUE(objects.find(content_hash, found));
@@ -48,7 +48,7 @@ TEST_F(ObjectDaoTest, ClaimsAndReleasesPendingDeletionObject) {
     filelink::db::ObjectDao objects(sql_);
     const std::string content_hash = "12345678901234567890123456789012";
 
-    objects.add_reference(content_hash, 42);
+    EXPECT_EQ(objects.add_reference(content_hash, 42), filelink::db::ObjectReferenceResult::Referenced);
     ASSERT_TRUE(objects.remove_reference(content_hash));
 
     EXPECT_TRUE(objects.claim_pending_delete(content_hash));
@@ -62,4 +62,20 @@ TEST_F(ObjectDaoTest, ClaimsAndReleasesPendingDeletionObject) {
     EXPECT_TRUE(objects.return_to_pending_delete(content_hash));
     ASSERT_TRUE(objects.find(content_hash, found));
     EXPECT_EQ(found.state, "PENDING_DELETE");
+}
+
+TEST_F(ObjectDaoTest, DoesNotReviveObjectClaimedByReclaimer) {
+    filelink::db::ObjectDao objects(sql_);
+    const std::string content_hash = "12345678901234567890123456789012";
+
+    EXPECT_EQ(objects.add_reference(content_hash, 42), filelink::db::ObjectReferenceResult::Referenced);
+    ASSERT_TRUE(objects.remove_reference(content_hash));
+    ASSERT_TRUE(objects.claim_pending_delete(content_hash));
+
+    EXPECT_EQ(objects.add_reference(content_hash, 42), filelink::db::ObjectReferenceResult::Reclaiming);
+
+    filelink::db::Object found;
+    ASSERT_TRUE(objects.find(content_hash, found));
+    EXPECT_EQ(found.ref_count, 0u);
+    EXPECT_EQ(found.state, "RECLAIMING");
 }
