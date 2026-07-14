@@ -31,6 +31,7 @@ if(FILELINK_BUILD_INTEGRATION_TESTS)
         UserSessionDaoTest.cpp
         AuthServiceTest.cpp
         AuthApiTest.cpp
+        RedisSessionCacheTest.cpp
         ObjectOrphanReclaimerTest.cpp
         ObjectReclaimerTest.cpp
     )

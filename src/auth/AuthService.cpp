@@ -1,6 +1,7 @@
 #include "AuthService.h"
 
 #include "PasswordHasher.h"
+#include "cache/RedisSessionCache.h"
 #include "db/SociSessionLease.h"
 #include "db/User.h"
 #include "db/UserSession.h"
@@ -74,6 +75,16 @@ std::tm session_expiry() {
     std::tm result{};
     localtime_r(&value, &result);
     return result;
+}
+
+unsigned int remaining_session_seconds(const std::tm& expires_at) {
+    std::tm local_expiry = expires_at;
+    const std::time_t expiry = std::mktime(&local_expiry);
+    const std::time_t now = std::time(nullptr);
+    if (expiry <= now) {
+        return 0;
+    }
+    return static_cast<unsigned int>(expiry - now);
 }
 
 AuthenticatedSession create_session(soci::session& sql, const db::User& user) {
@@ -165,11 +176,29 @@ CurrentUserResult AuthService::current_user(const std::string& session_token,
         return CurrentUserResult::InvalidSession;
     }
 
+    const std::string token_hash = hash_token(token);
+    std::string user_id;
+    if (session_cache_ != nullptr
+        && session_cache_->find_user_id(token_hash, user_id) == cache::CacheLookupResult::Hit) {
+        try {
+            db::SociSessionLease lease(pool_);
+            db::User user;
+            if (!db::UserDao(lease.get()).find_by_id(user_id, user) || user.is_disabled) {
+                session_cache_->remove(token_hash);
+                return CurrentUserResult::InvalidSession;
+            }
+            out_user = {user.user_id, user.username};
+            return CurrentUserResult::Success;
+        } catch (const std::exception&) {
+            return CurrentUserResult::SystemError;
+        }
+    }
+
     try {
         db::SociSessionLease lease(pool_);
         soci::session& sql = lease.get();
         db::UserSession session;
-        if (!db::UserSessionDao(sql).find_active(hash_token(token), session)) {
+        if (!db::UserSessionDao(sql).find_active(token_hash, session)) {
             return CurrentUserResult::InvalidSession;
         }
 
@@ -178,8 +207,11 @@ CurrentUserResult AuthService::current_user(const std::string& session_token,
             return CurrentUserResult::InvalidSession;
         }
 
-        out_user.user_id = user.user_id;
-        out_user.username = user.username;
+        out_user = {user.user_id, user.username};
+        if (session_cache_ != nullptr) {
+            session_cache_->store_user_id(token_hash, user.user_id,
+                remaining_session_seconds(session.expires_at));
+        }
         return CurrentUserResult::Success;
     } catch (const std::exception&) {
         return CurrentUserResult::SystemError;
@@ -196,9 +228,13 @@ LogoutResult AuthService::logout(const std::string& session_token) {
         return LogoutResult::InvalidSession;
     }
 
+    const std::string token_hash = hash_token(token);
     try {
         db::SociSessionLease lease(pool_);
-        db::UserSessionDao(lease.get()).remove(hash_token(token));
+        db::UserSessionDao(lease.get()).remove(token_hash);
+        if (session_cache_ != nullptr) {
+            session_cache_->remove(token_hash);
+        }
         return LogoutResult::Success;
     } catch (const std::exception&) {
         return LogoutResult::SystemError;

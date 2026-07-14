@@ -1,6 +1,7 @@
 #include "auth/AuthService.h"
 #include "MySqlTestConfig.h"
 #include "auth/PasswordHasher.h"
+#include "cache/RedisSessionCache.h"
 #include "db/User.h"
 
 #include <gtest/gtest.h>
@@ -10,6 +11,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 
 class AuthServiceTest : public testing::Test {
 protected:
@@ -24,6 +26,10 @@ protected:
 
     void clear_database() {
         soci::session sql(pool_);
+        sql << "DELETE FROM upload_sessions";
+        sql << "DELETE FROM shares";
+        sql << "DELETE FROM files";
+        sql << "DELETE FROM objects";
         sql << "DELETE FROM user_sessions";
         sql << "DELETE FROM users";
     }
@@ -119,6 +125,18 @@ TEST_F(AuthServiceTest, FindsCurrentUserFromActiveSession) {
     EXPECT_EQ(user.username, "alice");
 }
 
+TEST_F(AuthServiceTest, FallsBackToMySqlWhenRedisCacheIsDisabled) {
+    filelink::cache::RedisSessionCache cache({});
+    filelink::AuthService auth(pool_, &cache);
+    filelink::AuthenticatedSession session;
+    ASSERT_EQ(auth.register_user("alice", "correct-password", session),
+        filelink::RegisterResult::Success);
+
+    filelink::AuthenticatedUser user;
+    EXPECT_EQ(auth.current_user(session.session_token, user), filelink::CurrentUserResult::Success);
+    EXPECT_EQ(user.username, "alice");
+}
+
 TEST_F(AuthServiceTest, RejectsMalformedExpiredAndDisabledSessions) {
     filelink::AuthService auth(pool_);
     filelink::AuthenticatedSession expired_session;
@@ -175,4 +193,25 @@ TEST_F(AuthServiceTest, LogoutIsIdempotentAndRejectsMalformedToken) {
     EXPECT_EQ(auth.logout(session.session_token), filelink::LogoutResult::Success);
     EXPECT_EQ(auth.logout(session.session_token), filelink::LogoutResult::Success);
     EXPECT_EQ(auth.logout("not-a-token"), filelink::LogoutResult::InvalidSession);
+}
+
+TEST_F(AuthServiceTest, RedisCacheDoesNotKeepLoggedOutSessionAuthenticated) {
+    const char* redis_port = std::getenv("FILELINK_TEST_REDIS_PORT");
+    if (redis_port == nullptr || redis_port[0] == '\0') {
+        GTEST_SKIP() << "set FILELINK_TEST_REDIS_PORT to run Redis integration coverage";
+    }
+
+    filelink::cache::RedisConfig config;
+    config.enabled = true;
+    config.port = static_cast<uint16_t>(std::strtoul(redis_port, nullptr, 10));
+    filelink::cache::RedisSessionCache cache(config);
+    filelink::AuthService auth(pool_, &cache);
+    filelink::AuthenticatedSession session;
+    ASSERT_EQ(auth.register_user("alice", "correct-password", session),
+        filelink::RegisterResult::Success);
+
+    filelink::AuthenticatedUser user;
+    ASSERT_EQ(auth.current_user(session.session_token, user), filelink::CurrentUserResult::Success);
+    ASSERT_EQ(auth.logout(session.session_token), filelink::LogoutResult::Success);
+    EXPECT_EQ(auth.current_user(session.session_token, user), filelink::CurrentUserResult::InvalidSession);
 }

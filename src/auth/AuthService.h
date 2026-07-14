@@ -8,6 +8,10 @@ class connection_pool;
 
 namespace filelink {
 
+namespace cache {
+class RedisSessionCache;
+}
+
 // ========================================================
 // RegisterResult：账户注册操作的处理结果。
 // ========================================================
@@ -68,7 +72,8 @@ struct AuthenticatedUser {
 // =================================================================
 class AuthService {
 public:
-    explicit AuthService(soci::connection_pool& pool) : pool_(pool) {}
+    AuthService(soci::connection_pool& pool, cache::RedisSessionCache* session_cache = nullptr)
+        : pool_(pool), session_cache_(session_cache) {}
 
     RegisterResult register_user(const std::string& username,
         const std::string& password,
@@ -82,6 +87,7 @@ public:
 
 private:
     soci::connection_pool& pool_;
+    cache::RedisSessionCache* session_cache_;
 };
 
 } // namespace filelink

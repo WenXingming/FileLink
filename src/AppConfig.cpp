@@ -44,6 +44,14 @@ AppConfig parse_app_config(const std::vector<std::string>& args) {
     app.add_option("--mysql-password", config.mysql.password, "MySQL 密码")
         ->envname("FILELINK_MYSQL_PASSWORD");
 
+    app.add_flag("--redis-enabled", config.redis.enabled, "启用 Redis 会话缓存");
+    app.add_option("--redis-host", config.redis.host, "Redis 主机地址");
+    app.add_option("--redis-port", config.redis.port, "Redis 端口")
+        ->check(CLI::Range(1, 65535));
+    app.add_option("--redis-timeout-milliseconds", config.redis.timeoutMilliseconds,
+        "Redis 连接与命令超时时间(毫秒)")
+        ->check(CLI::PositiveNumber);
+
     // CLI11 的 vector 接口按栈顺序消费参数，对调用方仍暴露自然的命令行顺序。
     std::vector<std::string> parseArgs(args.rbegin(), args.rend());
     app.parse(parseArgs);

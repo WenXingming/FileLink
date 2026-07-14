@@ -18,6 +18,7 @@ set(BUILD_TESTING OFF CACHE BOOL "构建第三方依赖的测试" FORCE)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MySQLClient REQUIRED IMPORTED_TARGET mysqlclient)
 pkg_check_modules(Sodium REQUIRED IMPORTED_TARGET libsodium)
+pkg_check_modules(Hiredis REQUIRED IMPORTED_TARGET hiredis)
 
 # 优先使用系统中的 BLAKE3，未找到时获取官方 C 实现。
 if(NOT TARGET BLAKE3::blake3 AND NOT TARGET blake3)

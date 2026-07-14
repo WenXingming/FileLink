@@ -25,6 +25,7 @@ target_link_libraries(filelink_lib PUBLIC
 target_link_libraries(filelink_lib PUBLIC
     PkgConfig::MySQLClient
     PkgConfig::Sodium
+    PkgConfig::Hiredis
     soci_core
     soci_mysql
 )

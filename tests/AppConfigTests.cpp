@@ -40,6 +40,9 @@ TEST_F(AppConfigTest, UsesDefaults) {
     EXPECT_EQ(config.storageRoot, "./storage");
     EXPECT_EQ(config.webRoot, "./web");
     EXPECT_EQ(config.logRoot, "./logs");
+    EXPECT_FALSE(config.redis.enabled);
+    EXPECT_EQ(config.redis.host, "127.0.0.1");
+    EXPECT_EQ(config.redis.port, 6379);
 }
 
 TEST_F(AppConfigTest, ReadsCommandLineOptions) {
@@ -47,13 +50,21 @@ TEST_F(AppConfigTest, ReadsCommandLineOptions) {
         "--address", "127.0.0.1",
         "--port", "9000",
         "--io-threads", "4",
-        "--storage-root", "/srv/filelink"
+        "--storage-root", "/srv/filelink",
+        "--redis-enabled",
+        "--redis-host", "cache.internal",
+        "--redis-port", "6380",
+        "--redis-timeout-milliseconds", "50"
     });
 
     EXPECT_EQ(config.listenAddress, "127.0.0.1");
     EXPECT_EQ(config.port, 9000);
     EXPECT_EQ(config.ioThreads, 4);
     EXPECT_EQ(config.storageRoot, "/srv/filelink");
+    EXPECT_TRUE(config.redis.enabled);
+    EXPECT_EQ(config.redis.host, "cache.internal");
+    EXPECT_EQ(config.redis.port, 6380);
+    EXPECT_EQ(config.redis.timeoutMilliseconds, 50U);
 }
 
 TEST_F(AppConfigTest, EnablesOfflineObjectReclamation) {
@@ -116,6 +127,8 @@ TEST_F(AppConfigTest, RejectsInvalidNumbers) {
     EXPECT_ANY_THROW(filelink::parse_app_config({"--port", "0"}));
     EXPECT_ANY_THROW(filelink::parse_app_config({"--port", "65536"}));
     EXPECT_ANY_THROW(filelink::parse_app_config({"--io-threads", "-1"}));
+    EXPECT_ANY_THROW(filelink::parse_app_config({"--redis-port", "0"}));
+    EXPECT_ANY_THROW(filelink::parse_app_config({"--redis-timeout-milliseconds", "0"}));
 }
 
 TEST_F(AppConfigTest, RejectsInvalidInput) {
