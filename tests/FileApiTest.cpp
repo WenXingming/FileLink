@@ -1,5 +1,5 @@
 #include "MySqlTestConfig.h"
-#include "ObjectStore.h"
+#include "storage/ObjectStore.h"
 #include "auth/AuthService.h"
 #include "auth/RequestAuthenticator.h"
 #include "database/File.h"

@@ -1,5 +1,5 @@
 #include "MySqlTestConfig.h"
-#include "ObjectStore.h"
+#include "storage/ObjectStore.h"
 #include "cleaner/ObjectOrphanReclaimer.h"
 #include "database/Object.h"
 

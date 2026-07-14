@@ -1,4 +1,4 @@
-#include "ObjectStore.h"
+#include "storage/ObjectStore.h"
 
 #include <gtest/gtest.h>
 

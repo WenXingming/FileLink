@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ObjectStore.h"
+#include "storage/ObjectStore.h"
 #include "blake3.h"
 #include <chrono>
 #include <cstdint>

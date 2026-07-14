@@ -15,7 +15,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <cerrno>
-#include "ObjectStore.h"
+#include "storage/ObjectStore.h"
 #include "blake3.h"
 #include <thread>
 #include <fstream>

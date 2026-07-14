@@ -13,4 +13,4 @@ config/local.toml
 .agents/
 
 # storage
-storage/
+/storage/

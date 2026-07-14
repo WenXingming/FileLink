@@ -1,5 +1,5 @@
 #include "MySqlTestConfig.h"
-#include "StaticFileService.h"
+#include "site/StaticFileService.h"
 #include "auth/AuthService.h"
 #include "auth/RequestAuthenticator.h"
 #include "uploads/UploadApiRouter.h"

@@ -1,6 +1,6 @@
 #include "AppConfig.h"
-#include "ObjectStore.h"
-#include "StaticFileService.h"
+#include "storage/ObjectStore.h"
+#include "site/StaticFileService.h"
 #include "auth/AuthApiRouter.h"
 #include "auth/AuthService.h"
 #include "auth/RequestAuthenticator.h"
