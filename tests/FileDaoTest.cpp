@@ -24,6 +24,7 @@ protected:
 
     void clear_database() {
         sql_ << "DELETE FROM upload_sessions";
+        sql_ << "DELETE FROM shares";
         sql_ << "DELETE FROM files";
         sql_ << "DELETE FROM objects";
         sql_ << "DELETE FROM user_sessions";

@@ -53,6 +53,23 @@ CREATE TABLE files (
     INDEX idx_files_object (content_hash)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- Share 是指向单个逻辑文件的公开访问授权；URL 原始令牌只在客户端持有。
+CREATE TABLE shares (
+    share_id BINARY(16) NOT NULL,
+    file_id BINARY(16) NOT NULL,
+    token_hash BINARY(32) NOT NULL,
+    expires_at DATETIME(6) NOT NULL,
+    revoked_at DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (share_id),
+    UNIQUE KEY uq_shares_token_hash (token_hash),
+    CONSTRAINT fk_shares_file
+        FOREIGN KEY (file_id) REFERENCES files (file_id)
+        ON DELETE CASCADE,
+    INDEX idx_shares_file_created (file_id, created_at),
+    INDEX idx_shares_expiry (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 -- UploadSession 只描述临时传输过程；成功后通过 completed_file_id 指向最终逻辑文件。
 CREATE TABLE upload_sessions (
     upload_id BINARY(16) NOT NULL,
@@ -94,6 +111,7 @@ CREATE TABLE upload_sessions (
 
 -- migrate:down transaction:false
 DROP TABLE upload_sessions;
+DROP TABLE shares;
 DROP TABLE files;
 DROP TABLE objects;
 DROP TABLE user_sessions;

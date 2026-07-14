@@ -35,6 +35,7 @@ protected:
     void clear_database() {
         soci::session sql(pool_);
         sql << "DELETE FROM upload_sessions";
+        sql << "DELETE FROM shares";
         sql << "DELETE FROM files";
         sql << "DELETE FROM objects";
         sql << "DELETE FROM user_sessions";

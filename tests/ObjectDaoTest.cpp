@@ -20,6 +20,7 @@ protected:
 
     void clear_objects() {
         sql_ << "DELETE FROM upload_sessions";
+        sql_ << "DELETE FROM shares";
         sql_ << "DELETE FROM files";
         sql_ << "DELETE FROM objects";
     }

@@ -79,6 +79,7 @@ protected:
             {
                 soci::session sql(*pool);
                 sql << "DELETE FROM upload_sessions";
+                sql << "DELETE FROM shares";
                 sql << "DELETE FROM files";
                 sql << "DELETE FROM objects";
                 sql << "DELETE FROM user_sessions";
@@ -105,6 +106,7 @@ protected:
         try {
             soci::session sql(*pool);
             sql << "DELETE FROM upload_sessions";
+            sql << "DELETE FROM shares";
             sql << "DELETE FROM files";
             sql << "DELETE FROM objects";
             sql << "DELETE FROM user_sessions";

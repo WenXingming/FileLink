@@ -22,6 +22,7 @@ protected:
         try {
             sql.open(soci::mysql, filelink::test::mysql_connection_string());
             sql << "DELETE FROM upload_sessions";
+            sql << "DELETE FROM shares";
             sql << "DELETE FROM files";
             sql << "DELETE FROM objects";
             sql << "DELETE FROM user_sessions";
@@ -44,6 +45,7 @@ protected:
         }
         try {
             sql << "DELETE FROM upload_sessions";
+            sql << "DELETE FROM shares";
             sql << "DELETE FROM files";
             sql << "DELETE FROM objects";
             sql << "DELETE FROM user_sessions";
