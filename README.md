@@ -1,15 +1,15 @@
 # FileLink ⚡
 
 <p align="center">
-  <strong>基于内容寻址的大文件分发与存储平台</strong><br />
-  采用 MVC 架构、支持秒传去重与断点续传的现代化 C++ 网盘服务。
+  <strong>基于内容寻址的大文件存储与分享平台</strong><br />
+  采用分层模块化架构，支持秒传去重、分片上传与断点续传的 C++ 文件服务。
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-Linux-0F6CBD?style=flat-square" alt="Linux" />
   <img src="https://img.shields.io/badge/core-C%2B%2B14-00599C?style=flat-square" alt="C++14" />
   <img src="https://img.shields.io/badge/build-CMake%203.25%2B-064F8C?style=flat-square" alt="CMake" />
-  <img src="https://img.shields.io/badge/database-MySQL%208.4%2B-4479A1?style=flat-square" alt="MySQL" />
+  <img src="https://img.shields.io/badge/database-MySQL%208-4479A1?style=flat-square" alt="MySQL" />
   <img src="https://img.shields.io/badge/framework-Tudou-EF6C00?style=flat-square" alt="Tudou" />
 </p>
 
@@ -19,18 +19,27 @@
   <a href="#核心设计">📚 核心设计</a> 
 </p>
 
-> FileLink 旨在解决大体积文件在团队内部的高效流转，采用去重 (Dedup) 技术和基于硬链接 (link/unlink) 的原子发布协议保证数据的完整性。
+> FileLink 面向团队内部的大体积文件流转，使用 `File / Object` 两层模型实现跨用户内容去重，并通过 `fdatasync + link` 原子发布协议保证对象完整性。
 
 ## 项目亮点 ✨
 
 
-| 方向         | 当前能力                                                                                      |
-| -------------- | ----------------------------------------------------------------------------------------------- |
-| 存储引擎     | 基于 Blake3 的极速哈希计算、严格的`fdatasync` + `link` CAS 原子发布、多线程无锁复用           |
-| 容灾与一致性 | 基于内容寻址的对象提交、哈希一致性校验及临时文件安全清理机制，确保发布完整性                  |
-| 数据库接入   | 使用 SOCI 管理 SQL 绑定、事务和连接池，底层通过官方`libmysqlclient` 连接 MySQL                |
-| 高并发网络   | 强依赖底层`Tudou` 框架 (基于 Epoll 的多线程 Reactor 模型) 提供 HTTP 协议接入和路由分发        |
-| 工程配套     | 极致优雅的 CMake FetchContent 构建系统、GTest 单元测试与集成测试、Docker Compose 一键外围部署 |
+| 方向         | 当前能力                                                                             |
+| -------------- | -------------------------------------------------------------------------------------- |
+| 存储引擎     | 基于 BLAKE3 的流式哈希、`fdatasync + link` CAS 原子发布、相同内容的并发复用          |
+| 上传链路     | 基于 TUS 的分片上传、偏移续传、异步完成状态机及上传取消竞态保护                      |
+| 容灾与一致性 | 对象引用计数、待回收状态、过期上传清理及孤儿对象扫描，在线请求与离线维护职责分离     |
+| 数据库接入   | 使用 SOCI 管理 SQL 绑定、事务和连接池，底层通过官方 `libmysqlclient` 连接 MySQL      |
+| 高并发网络   | 基于 Epoll 多线程 Reactor 的 `Tudou` HTTP 服务，路由、业务服务与存储层分离           |
+| 工程配套     | CMake 构建、GoogleTest 单元/集成测试、Shell HTTP 检查、Docker Compose 与 dbmate 迁移 |
+
+## 使用场景
+
+用户登录后可以上传和管理私有文件，也可以为指定文件创建带过期时间的公开分享链接。相同内容被不同用户上传时，系统只保留一份物理对象，同时为每位用户维护独立的逻辑文件记录。
+
+## 页面预览 🖼️
+
+![FileLink Web 首页](./assets/filelink-server.png)
 
 <a id="快速开始"></a>
 
@@ -53,7 +62,7 @@ docker compose run --rm migrate
 
 ### 2. 编译项目
 
-项目完全采用 CMake 3.25+ 构建，并自动通过 FetchContent 获取一切需要的外部依赖（如 Tudou, CLI11, Blake3, googletest 等），完全不需要满世界找安装包。
+项目使用 CMake 3.25+ 构建。Tudou、CLI11、BLAKE3 和 GoogleTest 优先使用系统安装版本，缺失时由 `FetchContent` 获取；MySQL client、libsodium 和 hiredis 需要通过系统开发包提供。
 
 ```bash
 # 生成构建缓存并开启单元测试
@@ -65,7 +74,7 @@ cmake --build build -j4
 
 ### 3. 运行测试与启动服务
 
-默认只构建不依赖 MySQL 的单元测试：
+默认构建的单元测试不连接 MySQL 服务，也不需要运行 MySQL 容器：
 
 ```bash
 ctest --test-dir build -L unit --output-on-failure
@@ -133,7 +142,7 @@ flowchart TD
   subgraph Services ["Domain Services"]
     direction TB
     UploadSrv["UploadService\n(分片上传与异步终结)"]
-    ObjectSrv["ObjectService\n(对象查询与下载)"]
+    ObjectSrv["FileService\n(对象查询与下载)"]
     StaticSrv["StaticFileService\n(前端静态资源托管)"]
   end
 
@@ -158,16 +167,14 @@ flowchart TD
   class DI osLayer
 ```
 
-*(如果需要阅读文件级物理依赖图，请查看项目生成的最新 `docs/deps_weak.svg` 图像)*
-
 <a id="核心设计"></a>
 
 ## 核心设计 📚
 
-如果你打算深入阅读源码、准备相关岗位的面试，或者参与开源贡献，强烈建议阅读以下核心设计文档：
+- [项目总览与模块地图](./docs/项目总览与模块地图.md)：从组合根、模块职责和数据边界了解整体架构。
+- [分片上传与断点续传](./docs/Uploads：分片上传与断点续传设计.md)：说明 TUS 会话、异步完成和取消竞态的处理方式。
+- [内容寻址与物理存储](./docs/Storage：内容寻址与物理存储设计.md)：说明 BLAKE3、对象发布、去重和引用计数。
+- [对象回收与离线维护](./docs/Cleaner：对象回收与离线维护设计.md)：说明过期上传、待回收对象和孤儿文件的维护流程。
+- [数据库访问层与 SOCI 集成](./docs/Database：数据访问层 DAO 与 SOCI 集成.md)：说明 DAO、事务和连接池的组织方式。
 
-- [硬链接原子发布原理](./docs/为什么使用link-unlink原子发布.md)：详细解释了如何使用 `link()` 解决并发写入竞争，确保 CAS (内容寻址) 系统的提交原子性。
-- [为什么选择 SOCI](./docs/Q：为什么选择%20SOCI.md)：说明为何选择使用 SOCI 来管理连接生命周期、连接池和 C++ 风格的 SQL 绑定。
-- [服务层拆分设计](./docs/服务层拆分设计.md)：详细拆分核心逻辑，使存储、下载与分片上传高内聚低耦合。
-- [轻量级文件扩展名保留方案](./docs/轻量级文件扩展名保留方案.md)：说明系统在去重存储的同时，如何保留文件后缀名以支持浏览器正确预览。
-- [历史设计文档存档](./docs/archive/)：包含了早期的 MVP 设计记录、断点续传选型以及 V1 架构演进文档以供对比参考。
+如果需要阅读文件级物理依赖图，请查看 [`docs/archive/deps_weak.svg`](./docs/archive/deps_weak.svg)。
