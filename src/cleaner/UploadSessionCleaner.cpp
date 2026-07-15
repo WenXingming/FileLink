@@ -3,13 +3,13 @@
 #include "database/SociSessionLease.h"
 
 #include <cerrno>
+#include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <soci/connection-pool.h>
 #include <soci/rowset.h>
 #include <soci/soci.h>
 #include <sstream>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
@@ -32,44 +32,51 @@ UploadSessionCleaner::UploadSessionCleaner(soci::connection_pool& pool, std::str
     : pool_(pool), storageRoot_(std::move(storageRoot)) {
 }
 
-int UploadSessionCleaner::cleanup_expired_sessions() {
+int UploadSessionCleaner::cleanup_terminated_sessions() {
     int successCount = 0;
     try {
         db::SociSessionLease lease(pool_);
         soci::session& sql = lease.get();
 
-        // 1. 查询所有已过期的处于 UPLOADING 状态的会话
-        soci::rowset<std::string> rows = (sql.prepare <<
-            "SELECT upload_id FROM upload_sessions WHERE state = 'UPLOADING' AND expires_at < NOW()");
+        sql << "UPDATE upload_sessions SET state = 'EXPIRED' "
+               "WHERE state = 'UPLOADING' AND expires_at < NOW()";
 
-        // 2. 逐个清理物理文件与数据库状态
-        for (const auto& idBinary : rows) {
+        std::vector<std::string> uploadIds;
+        soci::rowset<std::string> rows = (sql.prepare <<
+            "SELECT upload_id FROM upload_sessions WHERE state IN ('ABORTED', 'EXPIRED')");
+        for (const std::string& uploadId : rows) {
+            uploadIds.push_back(uploadId);
+        }
+
+        for (const std::string& idBinary : uploadIds) {
             std::string idHex = bytes_to_hex(idBinary);
             std::string partPath = storageRoot_ + "/uploads/" + idHex + ".part";
 
-            // 尝试物理删除临时文件
-            struct stat st;
-            if (::stat(partPath.c_str(), &st) == 0) {
-                if (::unlink(partPath.c_str()) != 0 && errno != ENOENT) {
-                    std::cerr << "[Cleaner] Warning: Failed to unlink expired file: "
-                              << partPath << ", error: " << ::strerror(errno) << "\n";
-                }
+            if (::unlink(partPath.c_str()) != 0 && errno != ENOENT) {
+                std::cerr << "[Cleaner] Warning: Failed to unlink " << partPath
+                          << ", error: " << ::strerror(errno) << "\n";
+                continue;
             }
 
-            // 更新数据库状态为 EXPIRED
             try {
                 soci::transaction tr(sql);
-                sql << "UPDATE upload_sessions SET state = 'EXPIRED' WHERE upload_id = :id",
-                       soci::use(idBinary);
+                soci::statement statement = (sql.prepare
+                    << "DELETE FROM upload_sessions "
+                       "WHERE upload_id = :id AND state IN ('ABORTED', 'EXPIRED')",
+                    soci::use(idBinary));
+                statement.execute(false);
                 tr.commit();
-                successCount++;
+                if (statement.get_affected_rows() == 1) {
+                    successCount++;
+                }
             } catch (const std::exception& e) {
-                std::cerr << "[Cleaner] Error: Failed to update database state for session: "
+                std::cerr << "[Cleaner] Error: Failed to remove session: "
                           << idHex << ", error: " << e.what() << "\n";
             }
         }
     } catch (const std::exception& e) {
-        std::cerr << "[Cleaner] Critical Error: Database query failed during cleanup: " << e.what() << "\n";
+        std::cerr << "[Cleaner] Critical Error: Failed to clean terminated sessions: "
+                  << e.what() << "\n";
     }
 
     return successCount;

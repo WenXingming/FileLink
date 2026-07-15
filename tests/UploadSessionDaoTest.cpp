@@ -9,6 +9,7 @@
 #include <soci/mysql/soci-mysql.h>
 #include <fstream>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <exception>
 #include <string>
@@ -188,15 +189,79 @@ TEST_F(UploadSessionDaoTest, UploadSessionCleanerCleansExpiredSessionAndFiles) {
     pool.at(0).open(soci::mysql, filelink::test::mysql_connection_string());
     
     UploadSessionCleaner cleaner(pool, testStorage);
-    int cleaned = cleaner.cleanup_expired_sessions();
+    int cleaned = cleaner.cleanup_terminated_sessions();
     EXPECT_EQ(cleaned, 1);
 
     // 4. Verify physical file deleted
     EXPECT_NE(::stat(partPath.c_str(), &st), 0);
 
-    // 5. Verify database state updated to EXPIRED
+    // 5. Verify the terminated session was removed after physical cleanup.
     UploadSession found;
     bool exists = store.find("1111222233334444", found);
-    ASSERT_TRUE(exists);
-    EXPECT_EQ(found.state, "EXPIRED");
+    EXPECT_FALSE(exists);
+}
+
+TEST_F(UploadSessionDaoTest, UploadSessionCleanerRemovesAbortedSessionWhenPartIsMissing) {
+    UploadSessionDao store(sql);
+    UploadSession session;
+    session.upload_id = "5555666677778888";
+    session.owner_user_id = owner_user_id_;
+    session.state = "ABORTED";
+    session.file_name = "aborted.bin";
+    session.total_size = 100;
+    session.committed_offset = 0;
+    session.has_expected_hash = false;
+    session.has_content_hash = false;
+    session.has_failure_reason = false;
+
+    std::time_t t = std::time(nullptr);
+    session.expires_at = *std::localtime(&t);
+    store.create(session);
+
+    soci::connection_pool pool(1);
+    pool.at(0).open(soci::mysql, filelink::test::mysql_connection_string());
+
+    UploadSessionCleaner cleaner(pool, "./storage_test");
+    EXPECT_EQ(cleaner.cleanup_terminated_sessions(), 1);
+
+    UploadSession found;
+    EXPECT_FALSE(store.find(session.upload_id, found));
+}
+
+TEST_F(UploadSessionDaoTest, UploadSessionCleanerRetriesAbortedSessionWhenUnlinkFails) {
+    UploadSessionDao store(sql);
+    UploadSession session;
+    session.upload_id = "9999000011112222";
+    session.owner_user_id = owner_user_id_;
+    session.state = "ABORTED";
+    session.file_name = "retry.bin";
+    session.total_size = 100;
+    session.committed_offset = 0;
+    session.has_expected_hash = false;
+    session.has_content_hash = false;
+    session.has_failure_reason = false;
+
+    std::time_t t = std::time(nullptr);
+    session.expires_at = *std::localtime(&t);
+    store.create(session);
+
+    const std::string test_storage = "./storage_test";
+    const std::string uploads_dir = test_storage + "/uploads";
+    const std::string part_path = uploads_dir + "/39393939303030303131313132323232.part";
+    ::mkdir(test_storage.c_str(), 0755);
+    ::mkdir(uploads_dir.c_str(), 0755);
+    ASSERT_EQ(::mkdir(part_path.c_str(), 0755), 0);
+
+    soci::connection_pool pool(1);
+    pool.at(0).open(soci::mysql, filelink::test::mysql_connection_string());
+    UploadSessionCleaner cleaner(pool, test_storage);
+
+    EXPECT_EQ(cleaner.cleanup_terminated_sessions(), 0);
+    UploadSession found;
+    ASSERT_TRUE(store.find(session.upload_id, found));
+    EXPECT_EQ(found.state, "ABORTED");
+
+    ASSERT_EQ(::rmdir(part_path.c_str()), 0);
+    EXPECT_EQ(cleaner.cleanup_terminated_sessions(), 1);
+    EXPECT_FALSE(store.find(session.upload_id, found));
 }

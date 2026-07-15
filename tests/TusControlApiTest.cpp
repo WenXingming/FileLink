@@ -2,6 +2,7 @@
 #include "site/StaticFileService.h"
 #include "auth/AuthService.h"
 #include "auth/RequestAuthenticator.h"
+#include "cleaner/UploadSessionCleaner.h"
 #include "uploads/UploadApiRouter.h"
 #include "uploads/UploadService.h"
 #include "tudou/http/HttpServer.h"
@@ -643,7 +644,7 @@ TEST_F(TusDatabaseApiTest, PostDeduplicationInstantlyCompletes) {
 
 }
 
-TEST_F(TusDatabaseApiTest, DeleteUploadInstantlyFreesResources) {
+TEST_F(TusDatabaseApiTest, DeleteUploadMarksSessionAbortedForCleaner) {
     HttpServer server("127.0.0.1", 9999);
     std::string testStorage = "./storage_test";
     ObjectStore objectStore(testStorage);
@@ -692,8 +693,8 @@ TEST_F(TusDatabaseApiTest, DeleteUploadInstantlyFreesResources) {
     call_handle_tus_terminate(router, deleteReq, deleteResp);
     EXPECT_EQ(deleteResp.get_status_code(), 204);
 
-    // 4. Verify physical file deleted
-    EXPECT_NE(::stat(partPath.c_str(), &st), 0);
+    // 4. The Cleaner owns physical deletion, so the part file remains for now.
+    EXPECT_EQ(::stat(partPath.c_str(), &st), 0);
 
     // 5. Verify database state updated to ABORTED
     std::string uuidBinary;
@@ -714,10 +715,32 @@ TEST_F(TusDatabaseApiTest, DeleteUploadInstantlyFreesResources) {
         EXPECT_EQ(session.state, "ABORTED");
     }
 
-    // 6. Retry DELETE: expect 404 since it's already aborted
+    // 6. PATCH is rejected after the database cancellation.
+    HttpRequest secondPatchReq;
+    secondPatchReq.set_method("PATCH");
+    secondPatchReq.set_path("/uploads/" + uuidHex);
+    secondPatchReq.add_header("Content-Type", "application/offset+octet-stream");
+    secondPatchReq.add_header("Upload-Offset", "5");
+    secondPatchReq.set_body("!");
+
+    HttpResponse secondPatchResp;
+    call_handle_tus_patch(router, secondPatchReq, secondPatchResp);
+    EXPECT_EQ(secondPatchResp.get_status_code(), 404);
+
+    // 7. Retry DELETE: expect 404 since it's already aborted.
     HttpResponse deleteResp2;
     call_handle_tus_terminate(router, deleteReq, deleteResp2);
     EXPECT_EQ(deleteResp2.get_status_code(), 404);
+
+    // 8. The Cleaner removes both the part file and the terminated session.
+    UploadSessionCleaner cleaner(*pool, testStorage);
+    EXPECT_EQ(cleaner.cleanup_terminated_sessions(), 1);
+    EXPECT_NE(::stat(partPath.c_str(), &st), 0);
+
+    soci::session sql(*pool);
+    UploadSessionDao store(sql);
+    UploadSession session;
+    EXPECT_FALSE(store.find(uuidBinary, session));
 }
 
 TEST_F(TusDatabaseApiTest, DeleteRejectsFinalizingUpload) {

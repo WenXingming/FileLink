@@ -12,7 +12,7 @@
 
 | 清理器类 | 处理目标 | 激活参数 | 物理操作行为 |
 | :--- | :--- | :--- | :--- |
-| [UploadSessionCleaner](file:///home/wxm/FileLink/src/cleaner/UploadSessionCleaner.h#L16) | 过期且中断的临时的 `.part` 上传分片文件 | `--cleanup-expired` | 物理删除临时文件，并将数据库状态标记为 `EXPIRED`。 |
+| [UploadSessionCleaner](file:///home/wxm/FileLink/src/cleaner/UploadSessionCleaner.h#L16) | 过期或主动取消的上传会话及其 `.part` 文件 | `--cleanup-expired` | 先将过期会话标为 `EXPIRED`，回收 `ABORTED` / `EXPIRED` 文件；删除成功或 ENOENT 后删除会话记录。 |
 | [ObjectReclaimer](file:///home/wxm/FileLink/src/cleaner/ObjectReclaimer.h#L17) | 引用计数归零（`ref_count = 0`）的物理文件 | `--reclaim-pending-objects` | 物理认领待删除文件，`unlink` 成功后物理抹除数据库 `objects` 记录。 |
 | [ObjectOrphanReclaimer](file:///home/wxm/FileLink/src/cleaner/ObjectOrphanReclaimer.h#L15) | 磁盘上存在但 MySQL `objects` 表无记录的残留文件 | `--scan-orphaned-objects` / `--reclaim-orphaned-objects` | 双重检索核对，原子清除事务崩溃留下的磁盘残留。 |
 
@@ -87,43 +87,51 @@ int ObjectReclaimer::reclaim_pending_objects() {
 
 ---
 
-## 过期上传会话清理
+## 已终止上传会话清理
 
-有些客户端在大文件传输中途直接关闭了浏览器，会导致磁盘上遗留下大量未完成的 `.part` 临时文件。在 [UploadSessionCleaner::cleanup_expired_sessions](file:///home/wxm/FileLink/src/cleaner/UploadSessionCleaner.cpp#L35) 中，系统会找出这些已失效的传输会话进行空间释放：
+`UploadSessionCleaner` 处理两类逻辑上已经结束的会话：用户通过 `DELETE` 主动取消的 `ABORTED`，以及超过 `expires_at` 的 `UPLOADING`。后者会先写入 `EXPIRED`，从这一刻起两者均不再允许 PATCH；随后才进行物理删除。这样，即使 Cleaner 在删除文件前崩溃，数据库仍清楚表达该上传已失效，下次运行可以继续回收。
+
+`--cleanup-expired` 是保留的命令行参数名，但实际调用 [cleanup_terminated_sessions](file:///home/wxm/FileLink/src/cleaner/UploadSessionCleaner.cpp#L35)，并不只清理过期会话。该命令执行一次后退出，需要由 cron、systemd timer 或 Kubernetes CronJob 周期性调度。
 
 ```cpp
-int UploadSessionCleaner::cleanup_expired_sessions() {
+int UploadSessionCleaner::cleanup_terminated_sessions() {
     int successCount = 0;
     try {
         db::SociSessionLease lease(pool_);
         soci::session& sql = lease.get();
 
-        // 1. 查询所有已过期的 UPLOADING 临时上传会话
-        soci::rowset<std::string> rows = (sql.prepare <<
-            "SELECT upload_id FROM upload_sessions WHERE state = 'UPLOADING' AND expires_at < NOW()");
+        // 1. 先将超时的会话变为逻辑终态。
+        sql << "UPDATE upload_sessions SET state = 'EXPIRED' "
+               "WHERE state = 'UPLOADING' AND expires_at < NOW()";
 
-        for (const auto& idBinary : rows) {
+        // 2. 读取所有等待物理回收的会话。
+        std::vector<std::string> uploadIds;
+        soci::rowset<std::string> rows = (sql.prepare <<
+            "SELECT upload_id FROM upload_sessions WHERE state IN ('ABORTED', 'EXPIRED')");
+        for (const std::string& uploadId : rows) {
+            uploadIds.push_back(uploadId);
+        }
+
+        // 3. 删除 .part 成功后才删除会话；失败则保留记录以便下次重试。
+        for (const std::string& idBinary : uploadIds) {
             std::string idHex = bytes_to_hex(idBinary);
             std::string partPath = storageRoot_ + "/uploads/" + idHex + ".part";
 
-            // 2. 物理擦除临时分片
-            struct stat st;
-            if (::stat(partPath.c_str(), &st) == 0) {
-                if (::unlink(partPath.c_str()) != 0 && errno != ENOENT) {
-                    std::cerr << "[Cleaner] Warning: Failed to unlink expired file: "
-                              << partPath << ", error: " << ::strerror(errno) << "\n";
-                }
+            if (::unlink(partPath.c_str()) != 0 && errno != ENOENT) {
+                std::cerr << "[Cleaner] Warning: Failed to unlink " << partPath
+                          << ", error: " << ::strerror(errno) << "\n";
+                continue;
             }
 
-            // 3. 将会话状态在事务中更新为已失效 EXPIRED
             try {
                 soci::transaction tr(sql);
-                sql << "UPDATE upload_sessions SET state = 'EXPIRED' WHERE upload_id = :id",
+                sql << "DELETE FROM upload_sessions "
+                       "WHERE upload_id = :id AND state IN ('ABORTED', 'EXPIRED')",
                        soci::use(idBinary);
                 tr.commit();
                 successCount++;
             } catch (const std::exception& e) {
-                std::cerr << "[Cleaner] Error: Failed to update database state: " << e.what() << "\n";
+                std::cerr << "[Cleaner] Error: Failed to remove session: " << e.what() << "\n";
             }
         }
     } catch (const std::exception& e) {

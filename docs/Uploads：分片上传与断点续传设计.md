@@ -16,7 +16,7 @@ TUS 协议的核心思想是通过一组特化的 HTTP 动作来控制上传生�
 | **POST `/uploads`**        | 初始化上传会话 | 创建`UPLOADING` 会话，并依据数据库 `objects` 状态尝试秒传；未命中时保留普通上传。        |
 | **HEAD `/uploads/<id>`**   | 断点进度查询   | 返回当前服务端已持久化接收的`Upload-Offset` 与文件大小，用作客户端断网重连后的续传起点。 |
 | **PATCH `/uploads/<id>`**  | 传输二进制分片 | 追加写入分片数据，更新哈希计算器，校验偏置并递增`committed_offset`。                     |
-| **DELETE `/uploads/<id>`** | 取消上传会话   | 销毁上传任务，并立即擦除磁盘上未拼接完的临时`.part` 文件。                               |
+| **DELETE `/uploads/<id>`** | 取消上传会话   | 将 `UPLOADING` 会话原子标记为 `ABORTED`；`.part` 文件由离线 Cleaner 异步回收。            |
 
 ---
 

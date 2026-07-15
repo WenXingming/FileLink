@@ -73,6 +73,17 @@ void UploadSessionDao::update_state(const std::string& upload_id, const std::str
             soci::use(upload_id);
 }
 
+bool UploadSessionDao::abort_if_uploading(const std::string& upload_id,
+    const std::string& owner_user_id) {
+    soci::statement statement = (sql_.prepare
+        << "UPDATE upload_sessions SET state = 'ABORTED' "
+           "WHERE upload_id = :id AND owner_user_id = :owner AND state = 'UPLOADING'",
+        soci::use(upload_id),
+        soci::use(owner_user_id));
+    statement.execute(false);
+    return statement.get_affected_rows() == 1;
+}
+
 void UploadSessionDao::update_completed(const std::string& upload_id, const std::string& content_hash) {
     sql_ << "UPDATE upload_sessions SET state = 'COMPLETED', content_hash = :hash WHERE upload_id = :id",
             soci::use(content_hash),

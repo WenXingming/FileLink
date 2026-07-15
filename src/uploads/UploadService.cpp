@@ -213,6 +213,9 @@ UploadChunkResult UploadService::write_session_chunk(const std::string& ownerUse
         if (!sessionStore.find(uploadIdBinary, session) || session.owner_user_id != ownerUserId) {
             return UploadChunkResult::SessionNotFound;
         }
+        if (session.state != "UPLOADING") {
+            return UploadChunkResult::SessionNotFound;
+        }
 
         UploadChunkResult validation = validate_session_offset(session, clientOffset, chunkData.size());
         if (validation != UploadChunkResult::Success) {
@@ -261,35 +264,20 @@ UploadTerminationResult UploadService::terminate_session(const std::string& owne
         soci::session& sql = lease.get();
         
         db::UploadSessionDao sessionStore(sql);
-        db::UploadSession session;
-        if (!sessionStore.find(uploadIdBinary, session) || session.owner_user_id != ownerUserId) {
+        if (!sessionStore.abort_if_uploading(uploadIdBinary, ownerUserId)) {
+            db::UploadSession session;
+            if (sessionStore.find(uploadIdBinary, session)
+                && session.owner_user_id == ownerUserId
+                && session.state == "FINALIZING") {
+                return UploadTerminationResult::Finalizing;
+            }
             return UploadTerminationResult::SessionNotFound;
         }
 
-        if (session.state == "FINALIZING") {
-            return UploadTerminationResult::Finalizing;
-        }
-        if (session.state != "UPLOADING") {
-            return UploadTerminationResult::SessionNotFound;
-        }
-
-        // 1. Erase from active hashers map
         {
             std::lock_guard<std::mutex> lock(hashersMutex_);
             activeHashers_.erase(uploadIdHex);
         }
-
-        // 2. Physically remove temporary file
-        std::string partPath = get_part_file_path(uploadIdHex);
-        struct stat st;
-        if (::stat(partPath.c_str(), &st) == 0) {
-            ::unlink(partPath.c_str());
-        }
-
-        // 3. Update state in db to ABORTED
-        soci::transaction tr(sql);
-        sessionStore.update_state(uploadIdBinary, "ABORTED");
-        tr.commit();
 
         return UploadTerminationResult::Terminated;
     } catch (...) {

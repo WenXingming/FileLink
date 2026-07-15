@@ -56,8 +56,8 @@ int main(int argc, char* argv[]) {
 
         if (config.cleanupExpiredOnly) {
             filelink::UploadSessionCleaner cleaner(mysqlPool, config.storageRoot);
-            int count = cleaner.cleanup_expired_sessions();
-            std::cout << "Successfully cleaned " << count << " expired sessions.\n";
+            int count = cleaner.cleanup_terminated_sessions();
+            std::cout << "Successfully cleaned " << count << " terminated sessions.\n";
             return 0;
         }
 

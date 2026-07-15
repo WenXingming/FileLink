@@ -9,7 +9,7 @@ class connection_pool;
 namespace filelink {
 
 // ===========================================================================
-// UploadSessionCleaner：清理过期上传会话及其尚未发布的临时分片文件。
+// UploadSessionCleaner：清理已终止（取消上传或过期）上传会话及其尚未发布的临时分片文件。
 // ===========================================================================
 class UploadSessionCleaner {
 public:
@@ -19,7 +19,7 @@ public:
     UploadSessionCleaner(const UploadSessionCleaner&) = delete;
     UploadSessionCleaner& operator=(const UploadSessionCleaner&) = delete;
 
-    int cleanup_expired_sessions();
+    int cleanup_terminated_sessions();
 
 private:
     soci::connection_pool& pool_;
