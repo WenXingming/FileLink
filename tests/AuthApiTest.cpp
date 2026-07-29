@@ -92,8 +92,7 @@ protected:
 TEST_F(AuthApiTest, RegistersUserAndSetsSessionCookie) {
     HttpServer server("127.0.0.1", 9999);
     AuthService auth(pool_);
-    RequestAuthenticator request_authenticator(auth);
-    AuthApiRouter router(server, auth, request_authenticator);
+    AuthApiRouter router(server, auth);
 
     const HttpResponse response = register_user(router,
         R"({"username":"alice","password":"correct-password"})");
@@ -111,8 +110,7 @@ TEST_F(AuthApiTest, RegistersUserAndSetsSessionCookie) {
 TEST_F(AuthApiTest, RejectsInvalidBodyAndDuplicateUsername) {
     HttpServer server("127.0.0.1", 9999);
     AuthService auth(pool_);
-    RequestAuthenticator request_authenticator(auth);
-    AuthApiRouter router(server, auth, request_authenticator);
+    AuthApiRouter router(server, auth);
 
     EXPECT_EQ(register_user(router, R"({"username":"alice"})").get_status_code(), 400);
     EXPECT_EQ(register_user(router,
@@ -124,8 +122,7 @@ TEST_F(AuthApiTest, RejectsInvalidBodyAndDuplicateUsername) {
 TEST_F(AuthApiTest, LogsInAndSetsNewSessionCookie) {
     HttpServer server("127.0.0.1", 9999);
     AuthService auth(pool_);
-    RequestAuthenticator request_authenticator(auth);
-    AuthApiRouter router(server, auth, request_authenticator);
+    AuthApiRouter router(server, auth);
     ASSERT_EQ(register_user(router,
         R"({"username":"alice","password":"correct-password"})").get_status_code(), 201);
 
@@ -140,8 +137,7 @@ TEST_F(AuthApiTest, LogsInAndSetsNewSessionCookie) {
 TEST_F(AuthApiTest, RejectsInvalidLoginCredentials) {
     HttpServer server("127.0.0.1", 9999);
     AuthService auth(pool_);
-    RequestAuthenticator request_authenticator(auth);
-    AuthApiRouter router(server, auth, request_authenticator);
+    AuthApiRouter router(server, auth);
     ASSERT_EQ(register_user(router,
         R"({"username":"alice","password":"correct-password"})").get_status_code(), 201);
 
@@ -155,8 +151,7 @@ TEST_F(AuthApiTest, RejectsInvalidLoginCredentials) {
 TEST_F(AuthApiTest, ReturnsCurrentUserForValidSessionCookie) {
     HttpServer server("127.0.0.1", 9999);
     AuthService auth(pool_);
-    RequestAuthenticator request_authenticator(auth);
-    AuthApiRouter router(server, auth, request_authenticator);
+    AuthApiRouter router(server, auth);
     const HttpResponse registration = register_user(router,
         R"({"username":"alice","password":"correct-password"})");
     ASSERT_EQ(registration.get_status_code(), 201);
@@ -171,8 +166,7 @@ TEST_F(AuthApiTest, ReturnsCurrentUserForValidSessionCookie) {
 TEST_F(AuthApiTest, RejectsMissingMalformedAndLoggedOutSessionCookies) {
     HttpServer server("127.0.0.1", 9999);
     AuthService auth(pool_);
-    RequestAuthenticator request_authenticator(auth);
-    AuthApiRouter router(server, auth, request_authenticator);
+    AuthApiRouter router(server, auth);
     const HttpResponse registration = register_user(router,
         R"({"username":"alice","password":"correct-password"})");
     ASSERT_EQ(registration.get_status_code(), 201);
@@ -181,15 +175,16 @@ TEST_F(AuthApiTest, RejectsMissingMalformedAndLoggedOutSessionCookies) {
     EXPECT_EQ(current_user(router, "filelink_session=not-a-token").get_status_code(), 401);
 
     const std::string token = session_token(registration);
-    ASSERT_EQ(auth.logout(token), LogoutResult::Success);
+    EXPECT_EQ(current_user(router,
+        "filelink_session=" + token + "; filelink_session=" + token).get_status_code(), 401);
+    ASSERT_TRUE(auth.logout(token));
     EXPECT_EQ(current_user(router, "filelink_session=" + token).get_status_code(), 401);
 }
 
 TEST_F(AuthApiTest, LogsOutAndClearsSessionCookie) {
     HttpServer server("127.0.0.1", 9999);
     AuthService auth(pool_);
-    RequestAuthenticator request_authenticator(auth);
-    AuthApiRouter router(server, auth, request_authenticator);
+    AuthApiRouter router(server, auth);
     const HttpResponse registration = register_user(router,
         R"({"username":"alice","password":"correct-password"})");
     ASSERT_EQ(registration.get_status_code(), 201);
@@ -203,15 +198,16 @@ TEST_F(AuthApiTest, LogsOutAndClearsSessionCookie) {
     EXPECT_EQ(current_user(router, "filelink_session=" + token).get_status_code(), 401);
 }
 
-TEST_F(AuthApiTest, LogoutWithoutSessionIsIdempotent) {
+TEST_F(AuthApiTest, LogoutWithoutValidSessionIsIdempotent) {
     HttpServer server("127.0.0.1", 9999);
     AuthService auth(pool_);
-    RequestAuthenticator request_authenticator(auth);
-    AuthApiRouter router(server, auth, request_authenticator);
+    AuthApiRouter router(server, auth);
 
     const HttpResponse response = logout(router, "");
+    const HttpResponse malformed_response = logout(router, "filelink_session=not-a-token");
 
     EXPECT_EQ(response.get_status_code(), 204);
+    EXPECT_EQ(malformed_response.get_status_code(), 204);
     EXPECT_EQ(response.get_headers().at("Set-Cookie"),
         "filelink_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
 }

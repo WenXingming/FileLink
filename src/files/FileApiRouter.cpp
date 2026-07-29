@@ -2,6 +2,7 @@
 
 #include "ApiResponseView.h"
 #include "FileService.h"
+#include "auth/AuthRequestParser.h"
 #include "auth/AuthService.h"
 #include "shares/ShareApiRouter.h"
 #include "storage/ObjectStore.h"
@@ -68,15 +69,21 @@ HttpResponse json_response(int status_code, const char* status_message,
     return response;
 }
 
-bool authenticate_request(RequestAuthenticator& authenticator, const HttpRequest& request,
+bool authenticate_request(AuthService& auth_service, const HttpRequest& request,
     AuthenticatedUser& out_user, HttpResponse& response) {
-    switch (authenticator.authenticate(request, out_user)) {
-    case RequestAuthResult::Authenticated:
-        return true;
-    case RequestAuthResult::Unauthorized:
+    std::string session_token;
+    if (!AuthRequestParser::parse_session_token(request, session_token)) {
         response = json_response(401, "Unauthorized", {{"message", "Unauthorized"}});
         return false;
-    case RequestAuthResult::SystemError:
+    }
+
+    switch (auth_service.current_user(session_token, out_user)) {
+    case CurrentUserResult::Success:
+        return true;
+    case CurrentUserResult::InvalidSession:
+        response = json_response(401, "Unauthorized", {{"message", "Unauthorized"}});
+        return false;
+    case CurrentUserResult::SystemError:
         response = json_response(500, "Internal Server Error", {{"message", "Authentication failed"}});
         return false;
     }
@@ -113,7 +120,7 @@ void FileApiRouter::handle_download(const HttpRequest& request, HttpResponse& re
     }
 
     AuthenticatedUser user;
-    if (!authenticate_request(request_authenticator_, request, user, response)) return;
+    if (!authenticate_request(auth_service_, request, user, response)) return;
 
     try {
         db::File file;
@@ -137,7 +144,7 @@ void FileApiRouter::handle_delete(const HttpRequest& request, HttpResponse& resp
     }
 
     AuthenticatedUser user;
-    if (!authenticate_request(request_authenticator_, request, user, response)) return;
+    if (!authenticate_request(auth_service_, request, user, response)) return;
 
     try {
         if (!file_service_.delete_file(user.user_id, file_id)) {
@@ -152,7 +159,7 @@ void FileApiRouter::handle_delete(const HttpRequest& request, HttpResponse& resp
 
 void FileApiRouter::handle_list_files(const HttpRequest& request, HttpResponse& response) {
     AuthenticatedUser user;
-    if (!authenticate_request(request_authenticator_, request, user, response)) return;
+    if (!authenticate_request(auth_service_, request, user, response)) return;
 
     try {
         std::vector<db::File> files;

@@ -1,7 +1,6 @@
 #include "MySqlTestConfig.h"
 #include "storage/ObjectStore.h"
 #include "auth/AuthService.h"
-#include "auth/RequestAuthenticator.h"
 #include "database/File.h"
 #include "database/Object.h"
 #include "shares/ShareApiRouter.h"
@@ -85,11 +84,10 @@ TEST_F(ShareApiTest, OwnersCanCreateListAndRevokeShares) {
         db::FileDao(sql).create({file_id, alice.user_id, std::string(32, 'a'), "report.pdf", {}});
     }
 
-    RequestAuthenticator request_authenticator(auth_service);
     ShareService share_service(pool_);
     ObjectStore object_store("./storage_test");
     HttpServer server("127.0.0.1", 9999);
-    ShareApiRouter router(server, share_service, object_store, request_authenticator);
+    ShareApiRouter router(server, share_service, object_store, auth_service);
     const std::string collection_path = "/files/" + file_id_hex + "/shares";
 
     const HttpResponse created = request(router, "POST", collection_path, alice.session_token,
@@ -119,11 +117,10 @@ TEST_F(ShareApiTest, OwnersCanCreateListAndRevokeShares) {
 
 TEST_F(ShareApiTest, RejectsUnauthenticatedAndInvalidExpiryRequests) {
     AuthService auth_service(pool_);
-    RequestAuthenticator request_authenticator(auth_service);
     ShareService share_service(pool_);
     ObjectStore object_store("./storage_test");
     HttpServer server("127.0.0.1", 9999);
-    ShareApiRouter router(server, share_service, object_store, request_authenticator);
+    ShareApiRouter router(server, share_service, object_store, auth_service);
     const std::string path = "/files/73686172652d6170692d66696c653031/shares";
 
     EXPECT_EQ(request(router, "POST", path, "", R"({"expires_in_seconds":3600})").get_status_code(), 401);
@@ -161,9 +158,8 @@ TEST_F(ShareApiTest, DownloadsFilesGrantedByActiveTokenWithoutAuthentication) {
             std::time(nullptr) + 3600, share),
         CreateShareResult::Success);
 
-    RequestAuthenticator request_authenticator(auth_service);
     HttpServer server("127.0.0.1", 9999);
-    ShareApiRouter router(server, share_service, store, request_authenticator);
+    ShareApiRouter router(server, share_service, store, auth_service);
     const HttpResponse response = download(router, share.token);
 
     EXPECT_EQ(response.get_status_code(), 200);

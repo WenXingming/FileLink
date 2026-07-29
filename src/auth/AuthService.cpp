@@ -1,3 +1,8 @@
+// ============================================================================
+// 认证业务实现：校验凭据、创建和解析会话，并协调 MySQL 与 Redis。
+// 这里决定认证用例结果和事务边界，不处理 Cookie 或 HTTP 状态码。
+// ============================================================================
+
 #include "AuthService.h"
 
 #include "PasswordHasher.h"
@@ -19,6 +24,12 @@ namespace filelink {
 
 namespace {
 
+void ensure_sodium_ready() {
+    if (sodium_init() < 0) {
+        throw std::runtime_error("libsodium initialization failed");
+    }
+}
+
 bool is_valid_username(const std::string& username) {
     if (username.size() < 3 || username.size() > 64) {
         return false;
@@ -33,12 +44,14 @@ bool is_valid_username(const std::string& username) {
 }
 
 std::string random_bytes(std::size_t size) {
+    ensure_sodium_ready();
     std::string value(size, '\0');
     randombytes_buf(&value[0], value.size());
     return value;
 }
 
 std::string hash_token(const std::string& token) {
+    ensure_sodium_ready();
     std::array<unsigned char, crypto_generichash_BYTES> hash{};
     crypto_generichash(hash.data(), hash.size(),
         reinterpret_cast<const unsigned char*>(token.data()), token.size(), nullptr, 0);
@@ -46,6 +59,7 @@ std::string hash_token(const std::string& token) {
 }
 
 std::string encode_token(const std::string& token) {
+    ensure_sodium_ready();
     std::array<char, crypto_generichash_BYTES * 2 + 1> encoded{};
     sodium_bin2hex(encoded.data(), encoded.size(),
         reinterpret_cast<const unsigned char*>(token.data()), token.size());
@@ -53,6 +67,7 @@ std::string encode_token(const std::string& token) {
 }
 
 bool decode_token(const std::string& encoded, std::string& token) {
+    ensure_sodium_ready();
     if (encoded.size() != crypto_generichash_BYTES * 2) {
         return false;
     }
@@ -101,17 +116,14 @@ AuthenticatedSession create_session(soci::session& sql, const db::User& user) {
 
 } // namespace
 
-RegisterResult AuthService::register_user(const std::string& username,
-    const std::string& password,
-    AuthenticatedSession& out_session) {
+AuthService::AuthService(soci::connection_pool& pool, redis::UserSessionCache* session_cache) : pool_(pool), session_cache_(session_cache) {}
+
+RegisterResult AuthService::register_user(const std::string& username, const std::string& password, AuthenticatedSession& out_session) {
     if (!is_valid_username(username)) {
         return RegisterResult::InvalidUsername;
     }
     if (password.size() < 8 || password.size() > 128) {
         return RegisterResult::InvalidPassword;
-    }
-    if (sodium_init() < 0) {
-        return RegisterResult::SystemError;
     }
 
     try {
@@ -123,12 +135,12 @@ RegisterResult AuthService::register_user(const std::string& username,
             return RegisterResult::UsernameTaken;
         }
 
-        const std::string user_id = random_bytes(16);
         db::User user;
-        user.user_id = user_id;
+        user.user_id = random_bytes(16);
         user.username = username;
         user.password_hash = PasswordHasher::hash(password);
 
+        // 用户和初始会话必须同时成功或同时回滚。
         soci::transaction transaction(sql);
         users.create(user);
         AuthenticatedSession session = create_session(sql, user);
@@ -141,9 +153,7 @@ RegisterResult AuthService::register_user(const std::string& username,
     }
 }
 
-LoginResult AuthService::login_user(const std::string& username,
-    const std::string& password,
-    AuthenticatedSession& out_session) {
+LoginResult AuthService::login_user(const std::string& username, const std::string& password, AuthenticatedSession& out_session) {
     try {
         db::SociSessionLease lease(pool_);
         soci::session& sql = lease.get();
@@ -154,90 +164,74 @@ LoginResult AuthService::login_user(const std::string& username,
             return LoginResult::InvalidCredentials;
         }
 
-        soci::transaction transaction(sql);
-        AuthenticatedSession session = create_session(sql, user);
-        transaction.commit();
-
-        out_session = session;
+        out_session = create_session(sql, user);
         return LoginResult::Success;
     } catch (const std::exception&) {
         return LoginResult::SystemError;
     }
 }
 
-CurrentUserResult AuthService::current_user(const std::string& session_token,
-    AuthenticatedUser& out_user) {
-    if (sodium_init() < 0) {
-        return CurrentUserResult::SystemError;
-    }
-
-    std::string token;
-    if (!decode_token(session_token, token)) {
-        return CurrentUserResult::InvalidSession;
-    }
-
-    const std::string token_hash = hash_token(token);
-    std::string user_id;
-    if (session_cache_ != nullptr
-        && session_cache_->find_user_id(token_hash, user_id) == redis::CacheLookupResult::Hit) {
-        try {
-            db::SociSessionLease lease(pool_);
-            db::User user;
-            if (!db::UserDao(lease.get()).find_by_id(user_id, user) || user.is_disabled) {
-                session_cache_->remove(token_hash);
-                return CurrentUserResult::InvalidSession;
-            }
-            out_user = {user.user_id, user.username};
-            return CurrentUserResult::Success;
-        } catch (const std::exception&) {
-            return CurrentUserResult::SystemError;
-        }
-    }
-
+CurrentUserResult AuthService::current_user(const std::string& session_token, AuthenticatedUser& out_user) {
     try {
+        std::string token;
+        if (!decode_token(session_token, token)) {
+            return CurrentUserResult::InvalidSession;
+        }
+
+        const std::string token_hash = hash_token(token);
+        std::string user_id;
+        const bool cache_hit = session_cache_ != nullptr
+            && session_cache_->find_user_id(token_hash, user_id) == redis::CacheLookupResult::Hit;
+
         db::SociSessionLease lease(pool_);
         soci::session& sql = lease.get();
+
         db::UserSession session;
-        if (!db::UserSessionDao(sql).find_active(token_hash, session)) {
-            return CurrentUserResult::InvalidSession;
+        if (!cache_hit) {
+            if (!db::UserSessionDao(sql).find_active(token_hash, session)) {
+                return CurrentUserResult::InvalidSession;
+            }
+            user_id = session.user_id;
         }
 
+        // Redis 仅加速会话定位；未命中或不可用时回源，用户状态始终由 MySQL 确认。
         db::User user;
-        if (!db::UserDao(sql).find_by_id(session.user_id, user) || user.is_disabled) {
+        if (!db::UserDao(sql).find_by_id(user_id, user) || user.is_disabled) {
+            if (cache_hit) {
+                session_cache_->remove(token_hash);
+            }
             return CurrentUserResult::InvalidSession;
         }
 
-        out_user = {user.user_id, user.username};
-        if (session_cache_ != nullptr) {
+        if (!cache_hit && session_cache_ != nullptr) {
             session_cache_->store_user_id(token_hash, user.user_id,
                 remaining_session_seconds(session.expires_at));
         }
+
+        out_user = {user.user_id, user.username};
         return CurrentUserResult::Success;
     } catch (const std::exception&) {
         return CurrentUserResult::SystemError;
     }
 }
 
-LogoutResult AuthService::logout(const std::string& session_token) {
-    if (sodium_init() < 0) {
-        return LogoutResult::SystemError;
-    }
-
-    std::string token;
-    if (!decode_token(session_token, token)) {
-        return LogoutResult::InvalidSession;
-    }
-
-    const std::string token_hash = hash_token(token);
+bool AuthService::logout(const std::string& session_token) {
     try {
+        std::string token;
+        if (!decode_token(session_token, token)) {
+            // 注销是幂等的：无效 token 与不存在的会话都视为成功。
+            return true;
+        }
+
+        const std::string token_hash = hash_token(token);
         db::SociSessionLease lease(pool_);
         db::UserSessionDao(lease.get()).remove(token_hash);
         if (session_cache_ != nullptr) {
             session_cache_->remove(token_hash);
         }
-        return LogoutResult::Success;
+        return true;
     } catch (const std::exception&) {
-        return LogoutResult::SystemError;
+        return false;
     }
 }
 

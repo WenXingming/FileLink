@@ -176,7 +176,7 @@ TEST_F(AuthServiceTest, LogsOutByDeletingOnlyTheSpecifiedSession) {
     ASSERT_EQ(auth.login_user("alice", "correct-password", login),
         filelink::LoginResult::Success);
 
-    ASSERT_EQ(auth.logout(login.session_token), filelink::LogoutResult::Success);
+    ASSERT_TRUE(auth.logout(login.session_token));
     filelink::AuthenticatedUser user;
     EXPECT_EQ(auth.current_user(login.session_token, user),
         filelink::CurrentUserResult::InvalidSession);
@@ -184,15 +184,15 @@ TEST_F(AuthServiceTest, LogsOutByDeletingOnlyTheSpecifiedSession) {
         filelink::CurrentUserResult::Success);
 }
 
-TEST_F(AuthServiceTest, LogoutIsIdempotentAndRejectsMalformedToken) {
+TEST_F(AuthServiceTest, LogoutIsIdempotentForMissingOrMalformedSessions) {
     filelink::AuthService auth(pool_);
     filelink::AuthenticatedSession session;
     ASSERT_EQ(auth.register_user("alice", "correct-password", session),
         filelink::RegisterResult::Success);
 
-    EXPECT_EQ(auth.logout(session.session_token), filelink::LogoutResult::Success);
-    EXPECT_EQ(auth.logout(session.session_token), filelink::LogoutResult::Success);
-    EXPECT_EQ(auth.logout("not-a-token"), filelink::LogoutResult::InvalidSession);
+    EXPECT_TRUE(auth.logout(session.session_token));
+    EXPECT_TRUE(auth.logout(session.session_token));
+    EXPECT_TRUE(auth.logout("not-a-token"));
 }
 
 TEST_F(AuthServiceTest, RedisCacheDoesNotKeepLoggedOutSessionAuthenticated) {
@@ -212,6 +212,6 @@ TEST_F(AuthServiceTest, RedisCacheDoesNotKeepLoggedOutSessionAuthenticated) {
 
     filelink::AuthenticatedUser user;
     ASSERT_EQ(auth.current_user(session.session_token, user), filelink::CurrentUserResult::Success);
-    ASSERT_EQ(auth.logout(session.session_token), filelink::LogoutResult::Success);
+    ASSERT_TRUE(auth.logout(session.session_token));
     EXPECT_EQ(auth.current_user(session.session_token, user), filelink::CurrentUserResult::InvalidSession);
 }

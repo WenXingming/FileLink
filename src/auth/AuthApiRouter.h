@@ -1,32 +1,33 @@
+// ============================================================================
+// Controller（MVC）：认证 API Controller：注册端点，协调请求解析、AuthService 和响应 View。
+// 只编排 HTTP 流程，不实现输入格式、响应格式或认证业务细节。
+// ============================================================================
+
 #pragma once
 
-#include "tudou/http/HttpServer.h"
-#include "RequestAuthenticator.h"
+class HttpRequest;
+class HttpResponse;
+class HttpServer;
 
 namespace filelink {
 
-// =======================================================================
-// AuthApiRouter：注册认证相关 HTTP 路由，并将请求转交给 AuthService。
-// =======================================================================
-class AuthApiRouter {
-    friend class AuthApiTest;
+class AuthService;
 
+class AuthApiRouter {
 public:
-    AuthApiRouter(HttpServer& server, AuthService& auth_service,
-        RequestAuthenticator& request_authenticator)
-        : server_(server), auth_service_(auth_service), request_authenticator_(request_authenticator) {}
+    AuthApiRouter(HttpServer& server, AuthService& auth_service);
 
     void register_routes();
 
-private:
+    // Tudou 路由回调；测试也通过这些入口验证 HTTP 映射。
     void handle_register(const HttpRequest& request, HttpResponse& response);
     void handle_login(const HttpRequest& request, HttpResponse& response);
     void handle_current_user(const HttpRequest& request, HttpResponse& response);
     void handle_logout(const HttpRequest& request, HttpResponse& response);
 
+private:
     HttpServer& server_;
     AuthService& auth_service_;
-    RequestAuthenticator& request_authenticator_;
 };
 
 } // namespace filelink

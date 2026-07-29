@@ -1,10 +1,12 @@
 #pragma once
 
-#include "auth/RequestAuthenticator.h"
 #include "tudou/http/HttpServer.h"
 #include "uploads/UploadService.h"
 
 namespace filelink {
+
+class AuthService;
+struct AuthenticatedUser;
 
 // =====================================================================
 // UploadApiRouter：提供需要账户认证的 Tus 上传 HTTP 接口。
@@ -13,7 +15,7 @@ class UploadApiRouter {
     friend class TusControlApiTest;
 public:
     UploadApiRouter(HttpServer& server, UploadService& upload_service,
-        RequestAuthenticator& request_authenticator);
+        AuthService& auth_service);
 
     void register_routes();
 
@@ -29,7 +31,7 @@ private:
 
     HttpServer& server_;
     UploadService& uploadService_;
-    RequestAuthenticator& requestAuthenticator_;
+    AuthService& auth_service_;
 };
 
 } // namespace filelink

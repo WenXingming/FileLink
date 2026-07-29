@@ -1,11 +1,11 @@
 #pragma once
 
-#include "auth/RequestAuthenticator.h"
 #include "tudou/http/HttpServer.h"
 #include "tudou/http/HttpResponse.h"
 
 namespace filelink {
 
+class AuthService;
 class ShareService;
 class ObjectStore;
 
@@ -17,9 +17,9 @@ class ShareApiRouter {
 
 public:
     ShareApiRouter(HttpServer& server, ShareService& share_service, const ObjectStore& object_store,
-        RequestAuthenticator& request_authenticator)
+        AuthService& auth_service)
         : server_(server), share_service_(share_service), object_store_(object_store),
-          request_authenticator_(request_authenticator) {}
+          auth_service_(auth_service) {}
 
     void register_public_routes();
 
@@ -38,7 +38,7 @@ private:
     HttpServer& server_;
     ShareService& share_service_;
     const ObjectStore& object_store_;
-    RequestAuthenticator& request_authenticator_;
+    AuthService& auth_service_;
 };
 
 } // namespace filelink

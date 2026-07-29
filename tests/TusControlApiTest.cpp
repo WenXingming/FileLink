@@ -1,7 +1,6 @@
 #include "MySqlTestConfig.h"
 #include "site/StaticFileService.h"
 #include "auth/AuthService.h"
-#include "auth/RequestAuthenticator.h"
 #include "cleaner/UploadSessionCleaner.h"
 #include "uploads/UploadApiRouter.h"
 #include "uploads/UploadService.h"
@@ -92,7 +91,6 @@ protected:
                 != RegisterResult::Success) {
                 throw std::runtime_error("failed to create TUS test owner");
             }
-            requestAuthenticator = std::make_unique<RequestAuthenticator>(*authService);
         }
         catch (const std::exception& error) {
             pool.reset();
@@ -120,7 +118,6 @@ protected:
 
     std::unique_ptr<soci::connection_pool> pool;
     std::unique_ptr<AuthService> authService;
-    std::unique_ptr<RequestAuthenticator> requestAuthenticator;
     AuthenticatedSession ownerSession;
 
     void authenticate(HttpRequest& request) const {
@@ -157,9 +154,8 @@ TEST_F(TusControlApiTest, OptionsReturnsCapabilities) {
     soci::connection_pool dummyPool(1);
     UploadService uploadService(dummyPool, "./storage_test", ObjectStore("./storage_test"));
     AuthService authService(dummyPool);
-    RequestAuthenticator requestAuthenticator(authService);
 
-    ApiRouter router(server, uploadService, requestAuthenticator);
+    ApiRouter router(server, uploadService, authService);
 
     HttpRequest req;
     req.set_method("OPTIONS");
@@ -178,7 +174,7 @@ TEST_F(TusControlApiTest, OptionsReturnsCapabilities) {
 TEST_F(TusDatabaseApiTest, HeadReturnsOffsetForExistingSession) {
     HttpServer server("127.0.0.1", 9999);
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, uploadService, *requestAuthenticator);
+    ApiRouter router(server, uploadService, *authService);
 
     std::string uploadIdBinary = "\x12\x34\x56\x78\x90\x12\x34\x56\x78\x90\x12\x34\x56\x78\x90\x12";
     std::string uploadIdHex = "12345678901234567890123456789012";
@@ -215,7 +211,7 @@ TEST_F(TusDatabaseApiTest, HeadReturnsOffsetForExistingSession) {
 TEST_F(TusDatabaseApiTest, HeadReturnsNotFoundForNonExistentSession) {
     HttpServer server("127.0.0.1", 9999);
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, uploadService, *requestAuthenticator);
+    ApiRouter router(server, uploadService, *authService);
 
     HttpRequest req;
     req.set_method("HEAD");
@@ -230,7 +226,7 @@ TEST_F(TusDatabaseApiTest, HeadReturnsNotFoundForNonExistentSession) {
 TEST_F(TusDatabaseApiTest, PostCreatesSessionAndReturns201) {
     HttpServer server("127.0.0.1", 9999);
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, uploadService, *requestAuthenticator);
+    ApiRouter router(server, uploadService, *authService);
 
     HttpRequest req;
     req.set_method("POST");
@@ -285,7 +281,7 @@ TEST_F(TusDatabaseApiTest, PostCreatesSessionAndReturns201) {
 TEST_F(TusDatabaseApiTest, PostRejectsUnauthenticatedUpload) {
     HttpServer server("127.0.0.1", 9999);
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, uploadService, *requestAuthenticator);
+    ApiRouter router(server, uploadService, *authService);
 
     HttpRequest request;
     request.set_method("POST");
@@ -301,7 +297,7 @@ TEST_F(TusDatabaseApiTest, PostRejectsUnauthenticatedUpload) {
 TEST_F(TusDatabaseApiTest, HidesAnotherUsersUploadSession) {
     HttpServer server("127.0.0.1", 9999);
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, uploadService, *requestAuthenticator);
+    ApiRouter router(server, uploadService, *authService);
 
     HttpRequest create_request;
     create_request.set_method("POST");
@@ -350,10 +346,86 @@ TEST_F(TusDatabaseApiTest, HidesAnotherUsersUploadSession) {
     EXPECT_EQ(delete_response.get_status_code(), 404);
 }
 
+TEST_F(TusDatabaseApiTest, PatchRejectsOffsetMismatchWithoutChangingCommittedState) {
+    HttpServer server("127.0.0.1", 9999);
+    UploadService upload_service(*pool, "./storage_test", ObjectStore("./storage_test"));
+    ApiRouter router(server, upload_service, *authService);
+
+    HttpRequest create_request;
+    create_request.set_method("POST");
+    create_request.set_path("/uploads");
+    authenticate(create_request);
+    create_request.add_header("Upload-Length", "10");
+    HttpResponse create_response;
+    call_handle_tus_create(router, create_request, create_response);
+    ASSERT_EQ(create_response.get_status_code(), 201);
+    const std::string location = create_response.get_headers().at("Location");
+    const std::string upload_id = location.substr(location.find_last_of('/') + 1);
+
+    HttpRequest patch_request;
+    patch_request.set_method("PATCH");
+    patch_request.set_path("/uploads/" + upload_id);
+    patch_request.add_header("Content-Type", "application/offset+octet-stream");
+    patch_request.add_header("Upload-Offset", "1");
+    patch_request.set_body("abc");
+    HttpResponse patch_response;
+    call_handle_tus_patch(router, patch_request, patch_response);
+    EXPECT_EQ(patch_response.get_status_code(), 409);
+
+    HttpRequest head_request;
+    head_request.set_method("HEAD");
+    head_request.set_path("/uploads/" + upload_id);
+    HttpResponse head_response;
+    call_handle_tus_head(router, head_request, head_response);
+    ASSERT_EQ(head_response.get_status_code(), 200);
+    EXPECT_EQ(head_response.get_headers().at("Upload-Offset"), "0");
+
+    std::ifstream part_file("./storage_test/uploads/" + upload_id + ".part", std::ios::binary);
+    EXPECT_FALSE(part_file.is_open());
+}
+
+TEST_F(TusDatabaseApiTest, PatchRejectsChunkPastDeclaredLengthWithoutChangingCommittedState) {
+    HttpServer server("127.0.0.1", 9999);
+    UploadService upload_service(*pool, "./storage_test", ObjectStore("./storage_test"));
+    ApiRouter router(server, upload_service, *authService);
+
+    HttpRequest create_request;
+    create_request.set_method("POST");
+    create_request.set_path("/uploads");
+    authenticate(create_request);
+    create_request.add_header("Upload-Length", "4");
+    HttpResponse create_response;
+    call_handle_tus_create(router, create_request, create_response);
+    ASSERT_EQ(create_response.get_status_code(), 201);
+    const std::string location = create_response.get_headers().at("Location");
+    const std::string upload_id = location.substr(location.find_last_of('/') + 1);
+
+    HttpRequest patch_request;
+    patch_request.set_method("PATCH");
+    patch_request.set_path("/uploads/" + upload_id);
+    patch_request.add_header("Content-Type", "application/offset+octet-stream");
+    patch_request.add_header("Upload-Offset", "0");
+    patch_request.set_body("12345");
+    HttpResponse patch_response;
+    call_handle_tus_patch(router, patch_request, patch_response);
+    EXPECT_EQ(patch_response.get_status_code(), 400);
+
+    HttpRequest head_request;
+    head_request.set_method("HEAD");
+    head_request.set_path("/uploads/" + upload_id);
+    HttpResponse head_response;
+    call_handle_tus_head(router, head_request, head_response);
+    ASSERT_EQ(head_response.get_status_code(), 200);
+    EXPECT_EQ(head_response.get_headers().at("Upload-Offset"), "0");
+
+    std::ifstream part_file("./storage_test/uploads/" + upload_id + ".part", std::ios::binary);
+    EXPECT_FALSE(part_file.is_open());
+}
+
 TEST_F(TusDatabaseApiTest, PatchUploadsSequenceSuccessfully) {
     HttpServer server("127.0.0.1", 9999);
     UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, uploadService, *requestAuthenticator);
+    ApiRouter router(server, uploadService, *authService);
 
     HttpRequest postReq;
     postReq.set_method("POST");
@@ -454,7 +526,7 @@ TEST_F(TusDatabaseApiTest, PatchUploadsWithServerRestartAndLazyReconstruction) {
     // 1. Upload the first chunk with instance 1
     {
         UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, uploadService, *requestAuthenticator);
+    ApiRouter router(server, uploadService, *authService);
 
         HttpRequest postReq;
         postReq.set_method("POST");
@@ -487,7 +559,7 @@ TEST_F(TusDatabaseApiTest, PatchUploadsWithServerRestartAndLazyReconstruction) {
     // 2. Upload the rest of the chunks with instance 2, simulating a server restart
     {
         UploadService uploadService(*pool, "./storage_test", ObjectStore("./storage_test"));
-    ApiRouter router(server, uploadService, *requestAuthenticator);
+    ApiRouter router(server, uploadService, *authService);
 
         HttpRequest patchReq2;
         patchReq2.set_method("PATCH");
@@ -574,7 +646,7 @@ TEST_F(TusDatabaseApiTest, PostDeduplicationInstantlyCompletes) {
     std::string testStorage = "./storage_test";
     ObjectStore objectStore(testStorage);
     UploadService uploadService(*pool, testStorage, objectStore);
-    ApiRouter router(server, uploadService, *requestAuthenticator);
+    ApiRouter router(server, uploadService, *authService);
 
     std::string content = "instant_upload_test";
     std::string expectedHash(64, 'a');
@@ -649,7 +721,7 @@ TEST_F(TusDatabaseApiTest, DeleteUploadMarksSessionAbortedForCleaner) {
     std::string testStorage = "./storage_test";
     ObjectStore objectStore(testStorage);
     UploadService uploadService(*pool, testStorage, objectStore);
-    ApiRouter router(server, uploadService, *requestAuthenticator);
+    ApiRouter router(server, uploadService, *authService);
 
     // 1. Create upload session
     HttpRequest postReq;
@@ -747,7 +819,7 @@ TEST_F(TusDatabaseApiTest, DeleteRejectsFinalizingUpload) {
     HttpServer server("127.0.0.1", 9999);
     ObjectStore objectStore("./storage_test");
     UploadService uploadService(*pool, "./storage_test", objectStore);
-    ApiRouter router(server, uploadService, *requestAuthenticator);
+    ApiRouter router(server, uploadService, *authService);
 
     HttpRequest post_request;
     post_request.set_method("POST");
@@ -781,7 +853,7 @@ TEST_F(TusDatabaseApiTest, PostDeduplicationRejectsIncorrectSize) {
     std::string testStorage = "./storage_test";
     ObjectStore objectStore(testStorage);
     UploadService uploadService(*pool, testStorage, objectStore);
-    ApiRouter router(server, uploadService, *requestAuthenticator);
+    ApiRouter router(server, uploadService, *authService);
 
     std::string expectedHash(64, 'b');
     {

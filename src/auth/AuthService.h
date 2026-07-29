@@ -1,3 +1,8 @@
+// ============================================================================
+// Model/Application Service（MVC）：认证业务。认证业务接口：定义注册、登录、当前用户和注销用例及其结果类型。
+// AuthService 编排数据库与可选会话缓存，不依赖 HTTP 请求或响应。
+// ============================================================================
+
 #pragma once
 
 #include <string>
@@ -12,9 +17,6 @@ namespace redis {
 class UserSessionCache;
 }
 
-// ========================================================
-// RegisterResult：账户注册操作的处理结果。
-// ========================================================
 enum class RegisterResult {
     Success,
     InvalidUsername,
@@ -23,71 +25,43 @@ enum class RegisterResult {
     SystemError
 };
 
-// ========================================================
-// LoginResult：账户登录操作的处理结果。
-// ========================================================
 enum class LoginResult {
     Success,
     InvalidCredentials,
     SystemError
 };
 
-// =================================================================
-// CurrentUserResult：根据会话令牌查询当前用户的处理结果。
-// =================================================================
 enum class CurrentUserResult {
     Success,
     InvalidSession,
     SystemError
 };
 
-// ========================================================
-// LogoutResult：退出登录操作的处理结果。
-// ========================================================
-enum class LogoutResult {
-    Success,
-    InvalidSession,
-    SystemError
-};
-
-// =============================================================================
-// AuthenticatedSession：注册或登录成功后返回的用户信息及原始会话令牌。
-// =============================================================================
+// 注册或登录成功时返回给客户端的用户与会话令牌。
 struct AuthenticatedSession {
     std::string user_id;
     std::string username;
     std::string session_token;
 };
 
-// =====================================================================
-// AuthenticatedUser：通过有效会话令牌解析得到的当前用户身份信息。
-// =====================================================================
+// 从已有会话解析出的当前用户身份。
 struct AuthenticatedUser {
     std::string user_id;
     std::string username;
 };
 
-// =================================================================
-// AuthService：处理账户注册、登录、服务端会话查询和退出登录。
-// =================================================================
 class AuthService {
 public:
-    AuthService(soci::connection_pool& pool, redis::UserSessionCache* session_cache = nullptr)
-        : pool_(pool), session_cache_(session_cache) {}
+    AuthService(soci::connection_pool& pool, redis::UserSessionCache* session_cache = nullptr);
 
-    RegisterResult register_user(const std::string& username,
-        const std::string& password,
-        AuthenticatedSession& out_session);
-    LoginResult login_user(const std::string& username,
-        const std::string& password,
-        AuthenticatedSession& out_session);
-    CurrentUserResult current_user(const std::string& session_token,
-        AuthenticatedUser& out_user);
-    LogoutResult logout(const std::string& session_token);
+    RegisterResult register_user(const std::string& username, const std::string& password, AuthenticatedSession& out_session);
+    LoginResult login_user(const std::string& username, const std::string& password, AuthenticatedSession& out_session);
+    CurrentUserResult current_user(const std::string& session_token, AuthenticatedUser& out_user);
+    bool logout(const std::string& session_token);
 
 private:
     soci::connection_pool& pool_;
-    redis::UserSessionCache* session_cache_;
+    redis::UserSessionCache* session_cache_; // 可选的非持有缓存。
 };
 
 } // namespace filelink

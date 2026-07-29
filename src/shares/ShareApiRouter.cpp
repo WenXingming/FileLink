@@ -2,6 +2,7 @@
 
 #include "ApiResponseView.h"
 #include "ShareService.h"
+#include "auth/AuthRequestParser.h"
 #include "auth/AuthService.h"
 #include "storage/ObjectStore.h"
 
@@ -93,15 +94,21 @@ bool parse_share_path(const std::string& path, std::string& out_file_id,
     return hex_decode(path.substr(path.size() - kIdHexLength), out_share_id);
 }
 
-bool authenticate_request(RequestAuthenticator& authenticator, const HttpRequest& request,
+bool authenticate_request(AuthService& auth_service, const HttpRequest& request,
     AuthenticatedUser& out_user, HttpResponse& response) {
-    switch (authenticator.authenticate(request, out_user)) {
-    case RequestAuthResult::Authenticated:
-        return true;
-    case RequestAuthResult::Unauthorized:
+    std::string session_token;
+    if (!AuthRequestParser::parse_session_token(request, session_token)) {
         response = json_response(401, "Unauthorized", {{"message", "Unauthorized"}});
         return false;
-    case RequestAuthResult::SystemError:
+    }
+
+    switch (auth_service.current_user(session_token, out_user)) {
+    case CurrentUserResult::Success:
+        return true;
+    case CurrentUserResult::InvalidSession:
+        response = json_response(401, "Unauthorized", {{"message", "Unauthorized"}});
+        return false;
+    case CurrentUserResult::SystemError:
         response = json_response(500, "Internal Server Error", {{"message", "Authentication failed"}});
         return false;
     }
@@ -200,7 +207,7 @@ void ShareApiRouter::handle_public_download(const HttpRequest& request, HttpResp
 void ShareApiRouter::handle_create(const HttpRequest& request, HttpResponse& response,
     const std::string& file_id) {
     AuthenticatedUser user;
-    if (!authenticate_request(request_authenticator_, request, user, response)) return;
+    if (!authenticate_request(auth_service_, request, user, response)) return;
 
     std::time_t expiry;
     if (!read_expiry(request, expiry)) {
@@ -232,7 +239,7 @@ void ShareApiRouter::handle_create(const HttpRequest& request, HttpResponse& res
 void ShareApiRouter::handle_list(const HttpRequest& request, HttpResponse& response,
     const std::string& file_id) {
     AuthenticatedUser user;
-    if (!authenticate_request(request_authenticator_, request, user, response)) return;
+    if (!authenticate_request(auth_service_, request, user, response)) return;
 
     try {
         std::vector<db::Share> shares;
@@ -257,7 +264,7 @@ void ShareApiRouter::handle_list(const HttpRequest& request, HttpResponse& respo
 void ShareApiRouter::handle_revoke(const HttpRequest& request, HttpResponse& response,
     const std::string& file_id, const std::string& share_id) {
     AuthenticatedUser user;
-    if (!authenticate_request(request_authenticator_, request, user, response)) return;
+    if (!authenticate_request(auth_service_, request, user, response)) return;
 
     switch (share_service_.revoke_share(user.user_id, file_id, share_id)) {
     case RevokeShareResult::Success:

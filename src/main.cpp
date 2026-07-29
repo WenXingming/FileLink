@@ -3,7 +3,6 @@
 #include "site/StaticFileService.h"
 #include "auth/AuthApiRouter.h"
 #include "auth/AuthService.h"
-#include "auth/RequestAuthenticator.h"
 #include "redis/UserSessionCache.h"
 #include "files/FileApiRouter.h"
 #include "files/FileService.h"
@@ -90,20 +89,19 @@ int main(int argc, char* argv[]) {
         filelink::UploadService uploadService(mysqlPool, config.storageRoot, objectStore);
         filelink::redis::UserSessionCache redisSessionCache(config.redis);
         filelink::AuthService authService(mysqlPool, &redisSessionCache);
-        filelink::RequestAuthenticator requestAuthenticator(authService);
         filelink::FileService fileService(mysqlPool);
         filelink::ShareService shareService(mysqlPool);
         
         // 挂载 API 路由模块
         filelink::SiteRouter siteRouter(server, staticFileService);
         siteRouter.register_routes();
-        filelink::AuthApiRouter authRouter(server, authService, requestAuthenticator);
+        filelink::AuthApiRouter authRouter(server, authService);
         authRouter.register_routes();
-        filelink::ShareApiRouter shareApiRouter(server, shareService, objectStore, requestAuthenticator);
+        filelink::ShareApiRouter shareApiRouter(server, shareService, objectStore, authService);
         shareApiRouter.register_public_routes();
-        filelink::FileApiRouter fileRouter(server, fileService, objectStore, requestAuthenticator, shareApiRouter);
+        filelink::FileApiRouter fileRouter(server, fileService, objectStore, authService, shareApiRouter);
         fileRouter.register_routes();
-        filelink::UploadApiRouter uploadRouter(server, uploadService, requestAuthenticator);
+        filelink::UploadApiRouter uploadRouter(server, uploadService, authService);
         uploadRouter.register_routes();
 
         server.start();

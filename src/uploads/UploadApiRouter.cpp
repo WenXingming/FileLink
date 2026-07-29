@@ -1,5 +1,6 @@
 #include "uploads/UploadApiRouter.h"
 #include "ApiResponseView.h"
+#include "auth/AuthRequestParser.h"
 #include "auth/AuthService.h"
 
 #include "tudou/http/HttpRequest.h"
@@ -55,10 +56,10 @@ bool unsigned_header(const HttpRequest& request, const std::string& name, uint64
 } // namespace
 
 UploadApiRouter::UploadApiRouter(HttpServer& server, UploadService& uploadService,
-    RequestAuthenticator& requestAuthenticator)
+    AuthService& auth_service)
     : server_(server),
     uploadService_(uploadService),
-    requestAuthenticator_(requestAuthenticator) {
+    auth_service_(auth_service) {
 }
 
 void UploadApiRouter::register_routes() {
@@ -97,14 +98,22 @@ void UploadApiRouter::handle_tus_options(const HttpRequest&, HttpResponse& respo
 
 bool UploadApiRouter::authenticate_upload_request(const HttpRequest& req, AuthenticatedUser& out_user,
     HttpResponse& response) {
-    const RequestAuthResult auth_result = requestAuthenticator_.authenticate(req, out_user);
-    if (auth_result == RequestAuthResult::Authenticated) {
-        return true;
+    std::string session_token;
+    if (!AuthRequestParser::parse_session_token(req, session_token)) {
+        response = ApiResponseView::tus_error(401, "Unauthorized", "Unauthorized");
+        return false;
     }
 
-    response = ApiResponseView::tus_error(auth_result == RequestAuthResult::SystemError ? 500 : 401,
-        auth_result == RequestAuthResult::SystemError ? "Internal Server Error" : "Unauthorized",
-        auth_result == RequestAuthResult::SystemError ? "Authentication Failed" : "Unauthorized");
+    switch (auth_service_.current_user(session_token, out_user)) {
+    case CurrentUserResult::Success:
+        return true;
+    case CurrentUserResult::InvalidSession:
+        response = ApiResponseView::tus_error(401, "Unauthorized", "Unauthorized");
+        return false;
+    case CurrentUserResult::SystemError:
+        response = ApiResponseView::tus_error(500, "Internal Server Error", "Authentication Failed");
+        return false;
+    }
     return false;
 }
 

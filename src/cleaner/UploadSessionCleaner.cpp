@@ -65,8 +65,9 @@ int UploadSessionCleaner::cleanup_terminated_sessions() {
                        "WHERE upload_id = :id AND state IN ('ABORTED', 'EXPIRED')",
                     soci::use(idBinary));
                 statement.execute(false);
+                const bool deleted = statement.get_affected_rows() == 1;
                 tr.commit();
-                if (statement.get_affected_rows() == 1) {
+                if (deleted) {
                     successCount++;
                 }
             } catch (const std::exception& e) {
