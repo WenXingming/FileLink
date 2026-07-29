@@ -1,17 +1,19 @@
+// ============================================================================
+// 静态文件服务：校验资源路径并读取 web 根目录中的普通文件。
+// 不解释 MIME 类型，也不构造 HTTP 响应。
+// ============================================================================
+
 #pragma once
 
 #include <string>
 
 namespace filelink {
 
-// ====================================================================
-// StaticFileService：校验 URI 路径后读取 web 根目录中的静态资源。
-// ====================================================================
 class StaticFileService {
 public:
-    explicit StaticFileService(std::string webRoot);
+    explicit StaticFileService(std::string web_root);
 
-    std::string get_asset_content(const std::string& uriPath) const;
+    std::string read_asset(const std::string& uri_path) const;
 
 private:
     std::string webRoot_;

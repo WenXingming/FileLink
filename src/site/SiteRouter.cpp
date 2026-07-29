@@ -1,11 +1,23 @@
-#include "site/SiteRouter.h"
+// ============================================================================
+// Site HTTP Controller 实现：把每个请求平铺为读取输入、调用服务、选择响应。
+// HTTP 响应格式由 SiteResponseView 维护，磁盘访问由 StaticFileService 维护。
+// ============================================================================
 
-#include "ApiResponseView.h"
+#include "SiteRouter.h"
 
-#include <cctype>
+#include "SiteResponseView.h"
+#include "StaticFileService.h"
+#include "tudou/http/HttpRequest.h"
+#include "tudou/http/HttpResponse.h"
+#include "tudou/http/HttpServer.h"
+
 #include <exception>
+#include <stdexcept>
 
 namespace filelink {
+
+SiteRouter::SiteRouter(HttpServer& server, StaticFileService& static_file_service)
+    : server_(server), static_file_service_(static_file_service) {}
 
 void SiteRouter::register_routes() {
     server_.add_get_route("/", [this](const HttpRequest& request, HttpResponse& response) {
@@ -24,35 +36,27 @@ void SiteRouter::register_routes() {
 
 void SiteRouter::handle_index(const HttpRequest&, HttpResponse& response) {
     try {
-        response = ApiResponseView::file(static_file_service_.get_asset_content("/index.html"), ".html");
-    }
-    catch (const std::exception&) {
-        response = ApiResponseView::error(404, "index.html not found");
+        const std::string path = "/index.html";
+        const std::string content = static_file_service_.read_asset(path);
+        response = SiteResponseView::asset(path, content);
+    } catch (const std::exception&) {
+        response = SiteResponseView::not_found("index.html not found");
     }
 }
 
 void SiteRouter::handle_health(const HttpRequest&, HttpResponse& response) {
-    response = ApiResponseView::health_check();
+    response = SiteResponseView::health_check();
 }
 
 void SiteRouter::handle_static(const HttpRequest& request, HttpResponse& response) {
     try {
         const std::string path = request.get_path();
-        std::string extension;
-        const std::size_t dot_position = path.find_last_of('.');
-        if (dot_position != std::string::npos) {
-            extension = path.substr(dot_position);
-            for (char& character : extension) {
-                character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
-            }
-        }
-        response = ApiResponseView::file(static_file_service_.get_asset_content(path), extension);
-    }
-    catch (const std::invalid_argument& error) {
-        response = ApiResponseView::error(403, error.what());
-    }
-    catch (const std::exception& error) {
-        response = ApiResponseView::error(404, error.what());
+        const std::string content = static_file_service_.read_asset(path);
+        response = SiteResponseView::asset(path, content);
+    } catch (const std::invalid_argument& error) {
+        response = SiteResponseView::forbidden(error.what());
+    } catch (const std::exception& error) {
+        response = SiteResponseView::not_found(error.what());
     }
 }
 

@@ -37,7 +37,8 @@ bool AuthRequestParser::parse_credentials(const HttpRequest& request, std::strin
         username = body.at("username").get<std::string>();
         password = body.at("password").get<std::string>();
         return true;
-    } catch (const nlohmann::json::exception&) {
+    }
+    catch (const nlohmann::json::exception&) {
         return false;
     }
 }
@@ -46,14 +47,13 @@ bool AuthRequestParser::parse_session_token(const HttpRequest& request, std::str
     std::istringstream cookies(request.get_header("Cookie"));
     std::string cookie;
     bool found_session_cookie = false;
-
     while (std::getline(cookies, cookie, ';')) {
         const std::size_t equals = cookie.find('=');
         if (equals == std::string::npos || trim_whitespace(cookie.substr(0, equals)) != "filelink_session") {
             continue;
         }
 
-        // 多个同名会话 Cookie 含义不明确，不任意选择其中一个。
+        // 多个同名会话 Cookie 含义不明确，不任意选择其中一个。发现第二个同名 Cookie，认为存在歧义/篡改，直接拒绝请求
         if (found_session_cookie) {
             return false;
         }

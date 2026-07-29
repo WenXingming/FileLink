@@ -5,6 +5,7 @@ if(FILELINK_BUILD_TESTS)
         AppConfigTests.cpp
         ObjectStoreTests.cpp
         PasswordHasherTests.cpp
+        SiteTests.cpp
     )
     target_link_libraries(filelink_unit_tests PRIVATE
         filelink_lib

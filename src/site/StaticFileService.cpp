@@ -1,35 +1,38 @@
+// ============================================================================
+// 静态文件服务实现：阻止目录穿越，只把普通文件内容读入内存。
+// 路径到 HTTP 状态码的映射由 SiteRouter 决定。
+// ============================================================================
+
 #include "StaticFileService.h"
 
 #include <fstream>
+#include <iterator>
 #include <stdexcept>
 #include <sys/stat.h>
+#include <utility>
 
 namespace filelink {
 
-StaticFileService::StaticFileService(std::string webRoot)
-    : webRoot_(std::move(webRoot)) {}
+StaticFileService::StaticFileService(std::string web_root)
+    : webRoot_(std::move(web_root)) {}
 
-std::string StaticFileService::get_asset_content(const std::string& uriPath) const {
-    // 1. 安全检查：防路径穿越
-    if (uriPath.find("..") != std::string::npos) {
+std::string StaticFileService::read_asset(const std::string& uri_path) const {
+    if (uri_path.find("..") != std::string::npos) {
         throw std::invalid_argument("Forbidden: Directory traversal detected");
     }
 
-    std::string filePath = webRoot_ + uriPath;
-    
-    // 2. 存在性及常规文件检查
-    struct stat info;
-    if (::stat(filePath.c_str(), &info) != 0 || !S_ISREG(info.st_mode)) {
+    const std::string file_path = webRoot_ + uri_path;
+    struct stat info {};
+    if (::stat(file_path.c_str(), &info) != 0 || !S_ISREG(info.st_mode)) {
         throw std::runtime_error("Not Found");
     }
 
-    // 3. 读取文件内容
-    std::ifstream ifs(filePath, std::ios::binary);
-    if (!ifs) {
+    std::ifstream file(file_path, std::ios::binary);
+    if (!file) {
         throw std::runtime_error("Failed to open file");
     }
-    
-    return std::string((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+
+    return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
 }
 
 } // namespace filelink

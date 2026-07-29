@@ -1,3 +1,8 @@
+// ============================================================================
+// 文件与上传协议响应 View：构造内部下载和 Tus 协议响应。
+// 站点页面与健康检查响应由 site/SiteResponseView 负责。
+// ============================================================================
+
 #pragma once
 
 #include "tudou/http/HttpResponse.h"
@@ -9,16 +14,8 @@ namespace db {
 struct UploadSession;
 }
 
-// =====================================================================
-// ApiResponseView：集中构造健康检查、静态资源、内部下载和 Tus 协议响应。
-// =====================================================================
 class ApiResponseView {
 public:
-    static HttpResponse json(int statusCode, const std::string& jsonBody);
-
-    static HttpResponse health_check();
-    static HttpResponse error(int statusCode, const std::string& message);
-    static HttpResponse file(const std::string& content, const std::string& extension);
     static HttpResponse download_redirect(const std::string& objectKey,
         const std::string& displayName);
 
@@ -28,10 +25,6 @@ public:
     static HttpResponse tus_patched(uint64_t offset);
     static HttpResponse tus_error(int statusCode, const std::string& statusMessage, const std::string& message);
     static HttpResponse tus_session_status(const db::UploadSession& session);
-    
-private:
-    static std::string infer_mime_type(const std::string& ext);
-    static std::string escape_json(const std::string& input);
 };
 
 } // namespace filelink

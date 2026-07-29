@@ -19,7 +19,7 @@ public:
 
     void register_routes();
 
-    // Tudou 路由回调；测试也通过这些入口验证 HTTP 映射。
+private:
     void handle_register(const HttpRequest& request, HttpResponse& response);
     void handle_login(const HttpRequest& request, HttpResponse& response);
     void handle_current_user(const HttpRequest& request, HttpResponse& response);

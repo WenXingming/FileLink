@@ -1,32 +1,17 @@
+// ============================================================================
+// 文件与上传协议响应 View 实现：维护下载 Header 和 Tus 响应格式。
+// 不处理站点页面、健康检查或请求解析。
+// ============================================================================
+
 #include "ApiResponseView.h"
 #include "database/UploadSession.h"
-#include <sstream>
+
 #include <iomanip>
+#include <sstream>
 
 namespace filelink {
 
 namespace {
-
-const char* status_message(int status_code) {
-    switch (status_code) {
-    case 200:
-        return "OK";
-    case 400:
-        return "Bad Request";
-    case 401:
-        return "Unauthorized";
-    case 403:
-        return "Forbidden";
-    case 404:
-        return "Not Found";
-    case 409:
-        return "Conflict";
-    case 413:
-        return "Payload Too Large";
-    default:
-        return "Internal Server Error";
-    }
-}
 
 std::string hex_encode(const std::string& bytes) {
     std::stringstream stream;
@@ -45,62 +30,7 @@ std::string download_name(const std::string& display_name) {
     return name.empty() ? "download" : name;
 }
 
-} // namespace
-
-HttpResponse ApiResponseView::json(int statusCode, const std::string& jsonBody) {
-    HttpResponse response;
-    response.set_status(statusCode, status_message(statusCode));
-    response.set_body(jsonBody);
-    response.set_header("Content-Type", "application/json");
-    return response;
-}
-
-HttpResponse ApiResponseView::health_check() {
-    return json(200, R"({"status":"ok"})");
-}
-
-HttpResponse ApiResponseView::error(int statusCode, const std::string& message) {
-    std::string escapedMessage = escape_json(message);
-    std::string respBody = "{\"status\":\"error\",\"message\":\"" + escapedMessage + "\"}";
-    return json(statusCode, respBody);
-}
-
-HttpResponse ApiResponseView::file(const std::string& content, const std::string& extension) {
-    HttpResponse response;
-    response.set_status(200, "OK");
-    response.set_body(content);
-    response.set_header("Content-Type", infer_mime_type(extension));
-    response.set_header("Content-Length", std::to_string(content.size()));
-    return response;
-}
-
-HttpResponse ApiResponseView::download_redirect(const std::string& objectKey,
-    const std::string& displayName) {
-    HttpResponse response;
-    response.set_status(200, "OK");
-    response.set_header("Content-Type", "application/octet-stream");
-    response.set_header("Content-Disposition",
-        "attachment; filename=\"" + download_name(displayName) + "\"");
-    response.set_header("X-Accel-Redirect", "/_filelink_objects/" + objectKey);
-    return response;
-}
-
-std::string ApiResponseView::infer_mime_type(const std::string& ext) {
-    if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
-    if (ext == ".png") return "image/png";
-    if (ext == ".gif") return "image/gif";
-    if (ext == ".txt") return "text/plain; charset=utf-8";
-    if (ext == ".html") return "text/html; charset=utf-8";
-    if (ext == ".css") return "text/css; charset=utf-8";
-    if (ext == ".js") return "application/javascript; charset=utf-8";
-    if (ext == ".json") return "application/json";
-    if (ext == ".pdf") return "application/pdf";
-    if (ext == ".mp4") return "video/mp4";
-    if (ext == ".svg") return "image/svg+xml";
-    return "application/octet-stream";
-}
-
-std::string ApiResponseView::escape_json(const std::string& input) {
+std::string escape_json(const std::string& input) {
     std::string output;
     output.reserve(input.length());
     for (char c : input) {
@@ -116,7 +46,28 @@ std::string ApiResponseView::escape_json(const std::string& input) {
     return output;
 }
 
-HttpResponse ApiResponseView:: tus_options() {
+HttpResponse json_response(const std::string& body) {
+    HttpResponse response;
+    response.set_status(200, "OK");
+    response.set_header("Content-Type", "application/json");
+    response.set_body(body);
+    return response;
+}
+
+} // namespace
+
+HttpResponse ApiResponseView::download_redirect(const std::string& objectKey,
+    const std::string& displayName) {
+    HttpResponse response;
+    response.set_status(200, "OK");
+    response.set_header("Content-Type", "application/octet-stream");
+    response.set_header("Content-Disposition",
+        "attachment; filename=\"" + download_name(displayName) + "\"");
+    response.set_header("X-Accel-Redirect", "/_filelink_objects/" + objectKey);
+    return response;
+}
+
+HttpResponse ApiResponseView::tus_options() {
     HttpResponse response;
     response.set_status(204, "No Content");
     response.set_header("Tus-Resumable", "1.0.0");
@@ -183,7 +134,7 @@ HttpResponse ApiResponseView::tus_session_status(const db::UploadSession& sessio
     }
     body += "}";
 
-    return json(200, body);
+    return json_response(body);
 }
 
 } // namespace filelink

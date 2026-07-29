@@ -1,17 +1,21 @@
+// ============================================================================
+// Site HTTP Controller：注册主页、健康检查和静态资源路由。
+// 只编排请求、静态文件读取和响应 View，不处理文件格式或磁盘细节。
+// ============================================================================
+
 #pragma once
 
-#include "StaticFileService.h"
-#include "tudou/http/HttpServer.h"
+class HttpRequest;
+class HttpResponse;
+class HttpServer;
 
 namespace filelink {
 
-// =====================================================================
-// SiteRouter：提供主页、健康检查和 web 静态资源 HTTP 接口。
-// =====================================================================
+class StaticFileService;
+
 class SiteRouter {
 public:
-    SiteRouter(HttpServer& server, StaticFileService& static_file_service)
-        : server_(server), static_file_service_(static_file_service) {}
+    SiteRouter(HttpServer& server, StaticFileService& static_file_service);
 
     void register_routes();
 
