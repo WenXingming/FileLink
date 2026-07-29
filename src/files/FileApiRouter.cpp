@@ -1,19 +1,15 @@
 #include "FileApiRouter.h"
 
+#include "ApiResponseView.h"
 #include "FileService.h"
 #include "auth/AuthService.h"
 #include "shares/ShareApiRouter.h"
+#include "storage/ObjectStore.h"
 
 #include <nlohmann/json.hpp>
 
 #include <iomanip>
-#include <fcntl.h>
-#include <memory>
 #include <sstream>
-#include <sys/stat.h>
-#include <unistd.h>
-
-#include "base/ScopedFd.h"
 
 namespace filelink {
 
@@ -61,14 +57,6 @@ bool parse_file_id_path(const std::string& path, const std::string& suffix, std:
         return false;
     }
     return hex_decode(path.substr(prefix.size(), 32), out_file_id);
-}
-
-std::string download_name(const std::string& display_name) {
-    std::string name;
-    for (unsigned char value : display_name) {
-        name.push_back(value >= 32 && value < 127 && value != '"' && value != '\\' ? value : '_');
-    }
-    return name.empty() ? "download" : name;
 }
 
 HttpResponse json_response(int status_code, const char* status_message,
@@ -134,22 +122,8 @@ void FileApiRouter::handle_download(const HttpRequest& request, HttpResponse& re
             return;
         }
 
-        const std::string object_path = file_service_.object_path(file);
-        struct stat info;
-        const int descriptor = ::open(object_path.c_str(), O_RDONLY | O_CLOEXEC);
-        if (descriptor == -1 || ::fstat(descriptor, &info) != 0 || !S_ISREG(info.st_mode)) {
-            if (descriptor != -1) {
-                ::close(descriptor);
-            }
-            response = json_response(404, "Not Found", {{"message", "Not Found"}});
-            return;
-        }
-
-        response.set_status(200, "OK");
-        response.set_header("Content-Type", "application/octet-stream");
-        response.set_header("Content-Length", std::to_string(info.st_size));
-        response.set_header("Content-Disposition", "attachment; filename=\"" + download_name(file.display_name) + "\"");
-        response.set_file_body(std::make_shared<ScopedFd>(descriptor), static_cast<size_t>(info.st_size));
+        const std::string object_key = object_store_.get_object_key(hex_encode(file.content_hash));
+        response = ApiResponseView::download_redirect(object_key, file.display_name);
     } catch (const std::exception&) {
         response = json_response(500, "Internal Server Error", {{"message", "File download failed"}});
     }

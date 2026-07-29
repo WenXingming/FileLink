@@ -39,54 +39,22 @@ void FileApiRouter::register_routes() {
 }
 ```
 
-### 文件流式下载实现
+### 下载授权与 Nginx 内部重定向
 
-在 [handle_download](file:///home/wxm/FileLink/src/files/FileApiRouter.cpp#L118) 中，为了防止大文件读取导致应用进程 OOM 崩溃，系统采用了 POSIX 文件描述符结合 Tudou HTTP 框架的零拷贝传输：
+在 `handle_download` 中，FileLink 只负责认证、所有权检查和对象键转换，不读取文件正文：
 
 ```cpp
-void FileApiRouter::handle_download(const HttpRequest& request, HttpResponse& response) {
-    const std::string suffix = "/download";
-    const std::string path = request.get_path();
-    std::string file_id;
-    if (request.get_method() != "GET" || !parse_file_id_path(path, suffix, file_id)) {
-        response = json_response(404, "Not Found", {{"message", "Not Found"}});
-        return;
-    }
-
-    AuthenticatedUser user;
-    if (!authenticate_request(request_authenticator_, request, user, response)) return;
-
-    try {
-        db::File file;
-        // 严格的所有权与文件检索
-        if (!file_service_.find_file(user.user_id, file_id, file)) {
-            response = json_response(404, "Not Found", {{"message", "Not Found"}});
-            return;
-        }
-
-        const std::string object_path = file_service_.object_path(file);
-        struct stat info;
-        // 使用 O_CLOEXEC 标志打开文件描述符，防止进程派生泄露
-        const int descriptor = ::open(object_path.c_str(), O_RDONLY | O_CLOEXEC);
-        if (descriptor == -1 || ::fstat(descriptor, &info) != 0 || !S_ISREG(info.st_mode)) {
-            if (descriptor != -1) { ::close(descriptor); }
-            response = json_response(404, "Not Found", {{"message", "Not Found"}});
-            return;
-        }
-
-        // 装配文件流下载响应头
-        response.set_status(200, "OK");
-        response.set_header("Content-Type", "application/octet-stream");
-        response.set_header("Content-Length", std::to_string(info.st_size));
-        response.set_header("Content-Disposition", "attachment; filename=\"" + download_name(file.display_name) + "\"");
-        
-        // 核心：使用 ScopedFd 包装文件描述符，委托 HTTP 框架流式发包，不占用进程内存
-        response.set_file_body(std::make_shared<ScopedFd>(descriptor), static_cast<size_t>(info.st_size));
-    } catch (const std::exception&) {
-        response = json_response(500, "Internal Server Error", {{"message", "File download failed"}});
-    }
+db::File file;
+if (!file_service_.find_file(user.user_id, file_id, file)) {
+    response = json_response(404, "Not Found", {{"message", "Not Found"}});
+    return;
 }
+
+const std::string object_key = object_store_.get_object_key(hex_encode(file.content_hash));
+response = ApiResponseView::download_redirect(object_key, file.display_name);
 ```
+
+`download_redirect` 返回空响应体和 `X-Accel-Redirect`。Nginx 校验该内部地址、映射只读对象目录并发送文件，因此 FileLink 进程内存不随下载文件大小增长。完整数据路径、`sendfile` 前提和 Range 行为见[大文件上传与下载数据路径](大文件上传与下载数据路径.md)。
 
 ---
 
@@ -127,19 +95,6 @@ bool FileService::delete_file(const std::string& owner_user_id, const std::strin
 }
 ```
 
-### 物理路径转换逻辑
+### 服务职责边界
 
-在 [object_path](file:///home/wxm/FileLink/src/files/FileService.cpp#L44) 中，服务将数据库保存的 16 字节二进制哈希数据解码转换，并委托给 `ObjectStore` 获取磁盘的存放路径：
-
-```cpp
-std::string FileService::object_path(const db::File& file) const {
-    std::stringstream stream;
-    stream << std::hex << std::setfill('0');
-    // 将二进制哈希流转换为标准的 64 位十六进制小写文本
-    for (unsigned char value : file.content_hash) {
-        stream << std::setw(2) << static_cast<int>(value);
-    }
-    // 委托 ObjectStore 计算分层物理路径 (e.g. storage/objects/ab/cd/abcdef...)
-    return store_.get_object_path(stream.str());
-}
-```
+`FileService` 现在只负责逻辑文件的数据库查询和删除事务，不依赖 `ObjectStore`。物理对象键由需要下载能力的 Router 通过 `ObjectStore` 生成，文件正文则由 Nginx 发送。

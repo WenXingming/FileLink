@@ -3,8 +3,6 @@
 #include "database/Object.h"
 #include "database/SociSessionLease.h"
 
-#include <iomanip>
-#include <sstream>
 #include <stdexcept>
 
 namespace filelink {
@@ -39,15 +37,6 @@ bool FileService::delete_file(const std::string& owner_user_id, const std::strin
 
     transaction.commit();
     return true;
-}
-
-std::string FileService::object_path(const db::File& file) const {
-    std::stringstream stream;
-    stream << std::hex << std::setfill('0');
-    for (unsigned char value : file.content_hash) {
-        stream << std::setw(2) << static_cast<int>(value);
-    }
-    return store_.get_object_path(stream.str());
 }
 
 } // namespace filelink

@@ -4,7 +4,6 @@
 #include "auth/RequestAuthenticator.h"
 #include "database/File.h"
 #include "database/Object.h"
-#include "files/FileService.h"
 #include "shares/ShareApiRouter.h"
 #include "shares/ShareService.h"
 #include "tudou/http/HttpRequest.h"
@@ -88,9 +87,9 @@ TEST_F(ShareApiTest, OwnersCanCreateListAndRevokeShares) {
 
     RequestAuthenticator request_authenticator(auth_service);
     ShareService share_service(pool_);
-    FileService file_service(pool_, ObjectStore("./storage_test"));
+    ObjectStore object_store("./storage_test");
     HttpServer server("127.0.0.1", 9999);
-    ShareApiRouter router(server, share_service, file_service, request_authenticator);
+    ShareApiRouter router(server, share_service, object_store, request_authenticator);
     const std::string collection_path = "/files/" + file_id_hex + "/shares";
 
     const HttpResponse created = request(router, "POST", collection_path, alice.session_token,
@@ -122,9 +121,9 @@ TEST_F(ShareApiTest, RejectsUnauthenticatedAndInvalidExpiryRequests) {
     AuthService auth_service(pool_);
     RequestAuthenticator request_authenticator(auth_service);
     ShareService share_service(pool_);
-    FileService file_service(pool_, ObjectStore("./storage_test"));
+    ObjectStore object_store("./storage_test");
     HttpServer server("127.0.0.1", 9999);
-    ShareApiRouter router(server, share_service, file_service, request_authenticator);
+    ShareApiRouter router(server, share_service, object_store, request_authenticator);
     const std::string path = "/files/73686172652d6170692d66696c653031/shares";
 
     EXPECT_EQ(request(router, "POST", path, "", R"({"expires_in_seconds":3600})").get_status_code(), 401);
@@ -163,14 +162,14 @@ TEST_F(ShareApiTest, DownloadsFilesGrantedByActiveTokenWithoutAuthentication) {
         CreateShareResult::Success);
 
     RequestAuthenticator request_authenticator(auth_service);
-    FileService file_service(pool_, store);
     HttpServer server("127.0.0.1", 9999);
-    ShareApiRouter router(server, share_service, file_service, request_authenticator);
+    ShareApiRouter router(server, share_service, store, request_authenticator);
     const HttpResponse response = download(router, share.token);
 
     EXPECT_EQ(response.get_status_code(), 200);
-    EXPECT_TRUE(response.has_file_body());
-    EXPECT_EQ(response.get_file_size(), content.size());
+    EXPECT_TRUE(response.get_body().empty());
+    EXPECT_EQ(response.get_headers().at("X-Accel-Redirect"),
+        "/_filelink_objects/aa/aa/" + std::string(64, 'a'));
     EXPECT_EQ(response.get_headers().at("Content-Disposition"), "attachment; filename=\"report.pdf\"");
 
     ASSERT_EQ(share_service.revoke_share(alice.user_id, "share-api-file01", share.share_id),

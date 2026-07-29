@@ -143,15 +143,18 @@ CommitResult ObjectStore::commit(const std::string& tempPath, const std::string&
     throw std::system_error(linkError, std::generic_category(), tempPath);
 }
 
-std::string ObjectStore::get_object_path(const std::string& contentHash) const {
+std::string ObjectStore::get_object_key(const std::string& contentHash) const {
     if (!is_valid_hash(contentHash)) {
         throw std::invalid_argument("内容摘要必须是 64 位小写十六进制字符串");
     }
 
-    const std::string objectsDir = join_path(storageRoot_, "objects");
-    const std::string firstLevelDir = join_path(objectsDir, contentHash.substr(0, 2));
+    const std::string firstLevelDir = contentHash.substr(0, 2);
     const std::string secondLevelDir = join_path(firstLevelDir, contentHash.substr(2, 2));
     return join_path(secondLevelDir, contentHash);
+}
+
+std::string ObjectStore::get_object_path(const std::string& contentHash) const {
+    return join_path(join_path(storageRoot_, "objects"), get_object_key(contentHash));
 }
 
 } // namespace filelink

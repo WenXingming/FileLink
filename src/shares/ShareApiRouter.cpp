@@ -1,21 +1,16 @@
 #include "ShareApiRouter.h"
 
+#include "ApiResponseView.h"
 #include "ShareService.h"
 #include "auth/AuthService.h"
-#include "files/FileService.h"
+#include "storage/ObjectStore.h"
 
 #include <nlohmann/json.hpp>
 
 #include <ctime>
-#include <fcntl.h>
 #include <iomanip>
 #include <limits>
-#include <memory>
 #include <sstream>
-#include <sys/stat.h>
-#include <unistd.h>
-
-#include "base/ScopedFd.h"
 
 namespace filelink {
 
@@ -141,14 +136,6 @@ std::time_t unix_time(std::tm value) {
     return std::mktime(&value);
 }
 
-std::string download_name(const std::string& display_name) {
-    std::string name;
-    for (unsigned char value : display_name) {
-        name.push_back(value >= 32 && value < 127 && value != '"' && value != '\\' ? value : '_');
-    }
-    return name.empty() ? "download" : name;
-}
-
 bool public_token_from_path(const std::string& path, std::string& out_token) {
     if (path.size() <= kPublicSharesPrefix.size() + kDownloadSuffix.size()
         || path.compare(0, kPublicSharesPrefix.size(), kPublicSharesPrefix) != 0
@@ -203,23 +190,8 @@ void ShareApiRouter::handle_public_download(const HttpRequest& request, HttpResp
             return;
         }
 
-        const std::string object_path = file_service_.object_path(file);
-        struct stat info;
-        const int descriptor = ::open(object_path.c_str(), O_RDONLY | O_CLOEXEC);
-        if (descriptor == -1 || ::fstat(descriptor, &info) != 0 || !S_ISREG(info.st_mode)) {
-            if (descriptor != -1) {
-                ::close(descriptor);
-            }
-            response = json_response(404, "Not Found", {{"message", "Not Found"}});
-            return;
-        }
-
-        response.set_status(200, "OK");
-        response.set_header("Content-Type", "application/octet-stream");
-        response.set_header("Content-Length", std::to_string(info.st_size));
-        response.set_header("Content-Disposition",
-            "attachment; filename=\"" + download_name(file.display_name) + "\"");
-        response.set_file_body(std::make_shared<ScopedFd>(descriptor), static_cast<size_t>(info.st_size));
+        const std::string object_key = object_store_.get_object_key(hex_encode(file.content_hash));
+        response = ApiResponseView::download_redirect(object_key, file.display_name);
     } catch (const std::exception&) {
         response = json_response(500, "Internal Server Error", {{"message", "Share download failed"}});
     }

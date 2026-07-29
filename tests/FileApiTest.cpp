@@ -101,10 +101,11 @@ TEST_F(FileApiTest, ListsOnlyCurrentUsersFiles) {
 
     HttpServer server("127.0.0.1", 9999);
     RequestAuthenticator request_authenticator(auth_service);
-    FileService file_service(pool_, ObjectStore("./storage_test"));
+    ObjectStore object_store("./storage_test");
+    FileService file_service(pool_);
     ShareService share_service(pool_);
-    ShareApiRouter share_api_router(server, share_service, file_service, request_authenticator);
-    FileApiRouter router(server, file_service, request_authenticator, share_api_router);
+    ShareApiRouter share_api_router(server, share_service, object_store, request_authenticator);
+    FileApiRouter router(server, file_service, object_store, request_authenticator, share_api_router);
 
     const HttpResponse response = list_files(router, alice.session_token);
     ASSERT_EQ(response.get_status_code(), 200);
@@ -117,18 +118,19 @@ TEST_F(FileApiTest, ListsOnlyCurrentUsersFiles) {
 TEST_F(FileApiTest, RejectsUnauthenticatedRequests) {
     AuthService auth_service(pool_);
     RequestAuthenticator request_authenticator(auth_service);
-    FileService file_service(pool_, ObjectStore("./storage_test"));
+    ObjectStore object_store("./storage_test");
+    FileService file_service(pool_);
     HttpServer server("127.0.0.1", 9999);
     ShareService share_service(pool_);
-    ShareApiRouter share_api_router(server, share_service, file_service, request_authenticator);
-    FileApiRouter router(server, file_service, request_authenticator, share_api_router);
+    ShareApiRouter share_api_router(server, share_service, object_store, request_authenticator);
+    FileApiRouter router(server, file_service, object_store, request_authenticator, share_api_router);
 
     const HttpResponse response = list_files(router, "");
     EXPECT_EQ(response.get_status_code(), 401);
     EXPECT_EQ(response.get_body(), R"({"message":"Unauthorized"})");
 }
 
-TEST_F(FileApiTest, DownloadsOnlyOwnersFileWithFileBody) {
+TEST_F(FileApiTest, DownloadsOnlyOwnersFileThroughInternalRedirect) {
     AuthService auth_service(pool_);
     AuthenticatedSession alice;
     AuthenticatedSession bob;
@@ -154,17 +156,18 @@ TEST_F(FileApiTest, DownloadsOnlyOwnersFileWithFileBody) {
 
     HttpServer server("127.0.0.1", 9999);
     RequestAuthenticator request_authenticator(auth_service);
-    FileService file_service(pool_, ObjectStore("./storage_test"));
+    FileService file_service(pool_);
     ShareService share_service(pool_);
-    ShareApiRouter share_api_router(server, share_service, file_service, request_authenticator);
-    FileApiRouter router(server, file_service, request_authenticator, share_api_router);
+    ShareApiRouter share_api_router(server, share_service, store, request_authenticator);
+    FileApiRouter router(server, file_service, store, request_authenticator, share_api_router);
 
     const std::string file_id_hex = "646f776e6c6f61642d66696c65303030";
     const HttpResponse response = download_file(router, file_id_hex, alice.session_token);
 
     EXPECT_EQ(response.get_status_code(), 200);
-    EXPECT_TRUE(response.has_file_body());
-    EXPECT_EQ(response.get_file_size(), content.size());
+    EXPECT_TRUE(response.get_body().empty());
+    EXPECT_EQ(response.get_headers().at("X-Accel-Redirect"),
+        "/_filelink_objects/00/00/" + std::string(64, '0'));
     EXPECT_EQ(response.get_headers().at("Content-Disposition"), "attachment; filename=\"report.txt\"");
 
     const HttpResponse forbidden_response = download_file(router, file_id_hex, bob.session_token);
@@ -193,10 +196,11 @@ TEST_F(FileApiTest, DeletesOnlyOwnersFileAndMarksLastObjectReferencePending) {
 
     HttpServer server("127.0.0.1", 9999);
     RequestAuthenticator request_authenticator(auth_service);
-    FileService file_service(pool_, ObjectStore("./storage_test"));
+    ObjectStore object_store("./storage_test");
+    FileService file_service(pool_);
     ShareService share_service(pool_);
-    ShareApiRouter share_api_router(server, share_service, file_service, request_authenticator);
-    FileApiRouter router(server, file_service, request_authenticator, share_api_router);
+    ShareApiRouter share_api_router(server, share_service, object_store, request_authenticator);
+    FileApiRouter router(server, file_service, object_store, request_authenticator, share_api_router);
 
     const std::string alice_file_id_hex = "616c6963652d66696c652d6964303031";
     const std::string bob_file_id_hex = "626f622d66696c652d69643030303031";

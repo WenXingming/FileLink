@@ -86,11 +86,12 @@ int main(int argc, char* argv[]) {
         }
 
         // 初始化上传业务服务
-        filelink::UploadService uploadService(mysqlPool, config.storageRoot, filelink::ObjectStore(config.storageRoot));
+        filelink::ObjectStore objectStore(config.storageRoot);
+        filelink::UploadService uploadService(mysqlPool, config.storageRoot, objectStore);
         filelink::redis::UserSessionCache redisSessionCache(config.redis);
         filelink::AuthService authService(mysqlPool, &redisSessionCache);
         filelink::RequestAuthenticator requestAuthenticator(authService);
-        filelink::FileService fileService(mysqlPool, filelink::ObjectStore(config.storageRoot));
+        filelink::FileService fileService(mysqlPool);
         filelink::ShareService shareService(mysqlPool);
         
         // 挂载 API 路由模块
@@ -98,9 +99,9 @@ int main(int argc, char* argv[]) {
         siteRouter.register_routes();
         filelink::AuthApiRouter authRouter(server, authService, requestAuthenticator);
         authRouter.register_routes();
-        filelink::ShareApiRouter shareApiRouter(server, shareService, fileService, requestAuthenticator);
+        filelink::ShareApiRouter shareApiRouter(server, shareService, objectStore, requestAuthenticator);
         shareApiRouter.register_public_routes();
-        filelink::FileApiRouter fileRouter(server, fileService, requestAuthenticator, shareApiRouter);
+        filelink::FileApiRouter fileRouter(server, fileService, objectStore, requestAuthenticator, shareApiRouter);
         fileRouter.register_routes();
         filelink::UploadApiRouter uploadRouter(server, uploadService, requestAuthenticator);
         uploadRouter.register_routes();

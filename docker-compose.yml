@@ -92,6 +92,7 @@ services:
     network_mode: host
     volumes:
       - ./config/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./storage:/srv/filelink/storage:ro
 
 volumes:
   mysql-data:

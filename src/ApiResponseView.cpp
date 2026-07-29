@@ -37,10 +37,20 @@ std::string hex_encode(const std::string& bytes) {
     return stream.str();
 }
 
+std::string download_name(const std::string& display_name) {
+    std::string name;
+    for (unsigned char value : display_name) {
+        name.push_back(value >= 32 && value < 127 && value != '"' && value != '\\' ? value : '_');
+    }
+    return name.empty() ? "download" : name;
+}
+
 } // namespace
 
 HttpResponse ApiResponseView::json(int statusCode, const std::string& jsonBody) {
-    HttpResponse response = HttpResponse::plain_text(statusCode, status_message(statusCode), jsonBody);
+    HttpResponse response;
+    response.set_status(statusCode, status_message(statusCode));
+    response.set_body(jsonBody);
     response.set_header("Content-Type", "application/json");
     return response;
 }
@@ -61,6 +71,17 @@ HttpResponse ApiResponseView::file(const std::string& content, const std::string
     response.set_body(content);
     response.set_header("Content-Type", infer_mime_type(extension));
     response.set_header("Content-Length", std::to_string(content.size()));
+    return response;
+}
+
+HttpResponse ApiResponseView::download_redirect(const std::string& objectKey,
+    const std::string& displayName) {
+    HttpResponse response;
+    response.set_status(200, "OK");
+    response.set_header("Content-Type", "application/octet-stream");
+    response.set_header("Content-Disposition",
+        "attachment; filename=\"" + download_name(displayName) + "\"");
+    response.set_header("X-Accel-Redirect", "/_filelink_objects/" + objectKey);
     return response;
 }
 
@@ -95,7 +116,7 @@ std::string ApiResponseView::escape_json(const std::string& input) {
     return output;
 }
 
-HttpResponse ApiResponseView::tus_options() {
+HttpResponse ApiResponseView:: tus_options() {
     HttpResponse response;
     response.set_status(204, "No Content");
     response.set_header("Tus-Resumable", "1.0.0");

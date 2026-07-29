@@ -7,7 +7,7 @@
 namespace filelink {
 
 class ShareService;
-class FileService;
+class ObjectStore;
 
 // ========================================================================
 // ShareApiRouter：处理分享管理与公开下载 HTTP 请求。
@@ -16,9 +16,9 @@ class ShareApiRouter {
     friend class ShareApiTest;
 
 public:
-    ShareApiRouter(HttpServer& server, ShareService& share_service, FileService& file_service,
+    ShareApiRouter(HttpServer& server, ShareService& share_service, const ObjectStore& object_store,
         RequestAuthenticator& request_authenticator)
-        : server_(server), share_service_(share_service), file_service_(file_service),
+        : server_(server), share_service_(share_service), object_store_(object_store),
           request_authenticator_(request_authenticator) {}
 
     void register_public_routes();
@@ -37,7 +37,7 @@ private:
 
     HttpServer& server_;
     ShareService& share_service_;
-    FileService& file_service_;
+    const ObjectStore& object_store_;
     RequestAuthenticator& request_authenticator_;
 };
 

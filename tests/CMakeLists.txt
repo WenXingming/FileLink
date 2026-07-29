@@ -47,6 +47,7 @@ if(FILELINK_BUILD_INTEGRATION_TESTS)
 
     find_program(BASH_EXECUTABLE bash REQUIRED)
     find_program(CURL_EXECUTABLE curl REQUIRED)
+    find_program(DOCKER_EXECUTABLE docker REQUIRED)
 
     add_test(
         NAME integration.filelinkServerHealthCheck
@@ -71,6 +72,7 @@ if(FILELINK_BUILD_INTEGRATION_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/DownloadTest.sh
             $<TARGET_FILE:filelink-server>
             ${CURL_EXECUTABLE}
+            ${DOCKER_EXECUTABLE}
     )
     set_tests_properties(
         integration.filelinkServerHealthCheck

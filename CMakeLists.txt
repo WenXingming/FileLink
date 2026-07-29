@@ -57,7 +57,7 @@ if(NOT TARGET CLI11::CLI11)
     FetchContent_MakeAvailable(CLI11)
 endif()
 
-# 在线服务依赖 Tudou；优先使用系统安装，未找到时获取当前开发分支。
+# 在线服务依赖 Tudou；优先使用系统安装，未找到时获取稳定发布版本。
 if(NOT TARGET Tudou::tudou)
     find_package(Tudou CONFIG QUIET)
 endif()
@@ -66,7 +66,7 @@ if(NOT TARGET Tudou::tudou)
     FetchContent_Declare(
         Tudou
         GIT_REPOSITORY https://github.com/WenXingming/Tudou.git
-        GIT_TAG develop
+        GIT_TAG v1.0.0
         GIT_SHALLOW TRUE
     )
     FetchContent_MakeAvailable(Tudou)

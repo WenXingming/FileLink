@@ -10,7 +10,7 @@ struct UploadSession;
 }
 
 // =====================================================================
-// ApiResponseView：集中构造健康检查、静态资源和 Tus 协议响应。
+// ApiResponseView：集中构造健康检查、静态资源、内部下载和 Tus 协议响应。
 // =====================================================================
 class ApiResponseView {
 public:
@@ -19,6 +19,8 @@ public:
     static HttpResponse health_check();
     static HttpResponse error(int statusCode, const std::string& message);
     static HttpResponse file(const std::string& content, const std::string& extension);
+    static HttpResponse download_redirect(const std::string& objectKey,
+        const std::string& displayName);
 
     static HttpResponse tus_options();
     static HttpResponse tus_head(uint64_t offset, uint64_t length);

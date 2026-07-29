@@ -6,6 +6,7 @@
 namespace filelink {
 
 class FileService;
+class ObjectStore;
 class ShareApiRouter;
 
 // ====================================================================
@@ -15,10 +16,10 @@ class FileApiRouter {
     friend class FileApiTest;
 
 public:
-    FileApiRouter(HttpServer& server, FileService& file_service,
+    FileApiRouter(HttpServer& server, FileService& file_service, const ObjectStore& object_store,
         RequestAuthenticator& request_authenticator, ShareApiRouter& share_api_router)
-        : server_(server), file_service_(file_service), request_authenticator_(request_authenticator),
-          share_api_router_(share_api_router) {}
+        : server_(server), file_service_(file_service), object_store_(object_store),
+          request_authenticator_(request_authenticator), share_api_router_(share_api_router) {}
 
     void register_routes();
 
@@ -29,6 +30,7 @@ private:
 
     HttpServer& server_;
     FileService& file_service_;
+    const ObjectStore& object_store_;
     RequestAuthenticator& request_authenticator_;
     ShareApiRouter& share_api_router_;
 };
