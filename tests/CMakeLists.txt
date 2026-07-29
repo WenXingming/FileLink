@@ -3,6 +3,7 @@ include(GoogleTest)
 if(FILELINK_BUILD_TESTS)
     add_executable(filelink_unit_tests
         AppConfigTests.cpp
+        FileHttpTests.cpp
         ObjectStoreTests.cpp
         PasswordHasherTests.cpp
         SiteTests.cpp

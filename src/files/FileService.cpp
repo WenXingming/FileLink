@@ -1,3 +1,8 @@
+// ============================================================================
+// 文件业务服务实现：租用数据库连接执行所有权查询，并维护删除事务边界。
+// 删除逻辑文件和递减对象引用必须在同一事务中完成。
+// ============================================================================
+
 #include "FileService.h"
 
 #include "database/Object.h"
@@ -7,9 +12,13 @@
 
 namespace filelink {
 
-void FileService::list_files(const std::string& owner_user_id, std::vector<db::File>& out_files) {
+FileService::FileService(soci::connection_pool& pool) : pool_(pool) {}
+
+std::vector<db::File> FileService::list_files(const std::string& owner_user_id) {
     db::SociSessionLease lease(pool_);
-    db::FileDao(lease.get()).find_by_owner(owner_user_id, out_files);
+    std::vector<db::File> files;
+    db::FileDao(lease.get()).find_by_owner(owner_user_id, files);
+    return files;
 }
 
 bool FileService::find_file(const std::string& owner_user_id, const std::string& file_id,
