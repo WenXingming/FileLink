@@ -29,7 +29,7 @@ public:
 
     CommitResult commit(const std::string& tempPath, const std::string& contentHash) const;
 
-    std::string get_object_key(const std::string& contentHash) const;
+    static std::string get_object_key(const std::string& contentHash);
     std::string get_object_path(const std::string& contentHash) const;
 
 private:

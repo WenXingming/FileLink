@@ -12,7 +12,6 @@ namespace filelink {
 namespace {
 
 const std::string kFilesPrefix = "/files/";
-const std::string kDownloadSuffix = "/download";
 const std::size_t kFileIdHexLength = 32;
 
 int hex_digit(char value) {
@@ -39,12 +38,9 @@ bool decode_file_id(const std::string& encoded, std::string& file_id) {
     return true;
 }
 
-bool parse_file_path(const std::string& path, const std::string& suffix, std::string& file_id) {
-    const std::size_t expected_size = kFilesPrefix.size() + kFileIdHexLength + suffix.size();
-    if (path.size() != expected_size || path.compare(0, kFilesPrefix.size(), kFilesPrefix) != 0) {
-        return false;
-    }
-    if (!suffix.empty() && path.compare(path.size() - suffix.size(), suffix.size(), suffix) != 0) {
+bool parse_file_path(const std::string& path, std::string& file_id) {
+    if (path.size() != kFilesPrefix.size() + kFileIdHexLength
+        || path.compare(0, kFilesPrefix.size(), kFilesPrefix) != 0) {
         return false;
     }
     return decode_file_id(path.substr(kFilesPrefix.size(), kFileIdHexLength), file_id);
@@ -52,13 +48,8 @@ bool parse_file_path(const std::string& path, const std::string& suffix, std::st
 
 } // namespace
 
-bool FileRequestParser::parse_download_file_id(const HttpRequest& request, std::string& file_id) {
-    return request.get_method() == "GET"
-        && parse_file_path(request.get_path(), kDownloadSuffix, file_id);
-}
-
 bool FileRequestParser::parse_file_id(const HttpRequest& request, std::string& file_id) {
-    return parse_file_path(request.get_path(), "", file_id);
+    return parse_file_path(request.get_path(), file_id);
 }
 
 } // namespace filelink

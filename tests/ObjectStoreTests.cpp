@@ -69,10 +69,8 @@ protected:
 } // namespace
 
 TEST_F(ObjectStoreTest, BuildsRelativeObjectKeyAndRejectsInvalidHash) {
-    const filelink::ObjectStore store(storageRoot_);
-
-    EXPECT_EQ(store.get_object_key(kHash), "aa/aa/" + kHash);
-    EXPECT_THROW(store.get_object_key(std::string(64, 'A')), std::invalid_argument);
+    EXPECT_EQ(filelink::ObjectStore::get_object_key(kHash), "aa/aa/" + kHash);
+    EXPECT_THROW(filelink::ObjectStore::get_object_key(std::string(64, 'A')), std::invalid_argument);
 }
 
 TEST_F(ObjectStoreTest, CreatesContentAddressedObject) {

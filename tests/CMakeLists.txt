@@ -3,9 +3,11 @@ include(GoogleTest)
 if(FILELINK_BUILD_TESTS)
     add_executable(filelink_unit_tests
         AppConfigTests.cpp
+        DownloadHttpTests.cpp
         FileHttpTests.cpp
         ObjectStoreTests.cpp
         PasswordHasherTests.cpp
+        ShareHttpTests.cpp
         SiteTests.cpp
     )
     target_link_libraries(filelink_unit_tests PRIVATE
@@ -27,8 +29,8 @@ if(FILELINK_BUILD_INTEGRATION_TESTS)
         FileDaoTest.cpp
         ShareDaoTest.cpp
         ShareServiceTest.cpp
-        ShareApiTest.cpp
-        FileApiTest.cpp
+        FileServiceTest.cpp
+        DownloadServiceTest.cpp
         UserDaoTest.cpp
         UserSessionDaoTest.cpp
         AuthServiceTest.cpp

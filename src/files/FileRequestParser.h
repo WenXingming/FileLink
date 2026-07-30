@@ -13,7 +13,6 @@ namespace filelink {
 
 class FileRequestParser {
 public:
-    static bool parse_download_file_id(const HttpRequest& request, std::string& file_id);
     static bool parse_file_id(const HttpRequest& request, std::string& file_id);
 };
 

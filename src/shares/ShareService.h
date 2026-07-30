@@ -1,3 +1,8 @@
+// ============================================================================
+// 分享业务服务：管理分享令牌、文件所有权、有效期和数据库操作。
+// 不解析 HTTP，不构造响应，也不读取或传输物理文件内容。
+// ============================================================================
+
 #pragma once
 
 #include "database/File.h"
@@ -42,24 +47,15 @@ struct CreatedShare {
     std::tm expires_at{};
 };
 
-// ========================================================================
-// ShareService：处理文件所有者创建、查看和撤销分享链接的业务规则。
-// ========================================================================
+// 处理文件所有者的分享管理，以及公开令牌到逻辑文件的查询。
 class ShareService {
 public:
     explicit ShareService(soci::connection_pool& pool) : pool_(pool) {}
 
-    CreateShareResult create_share(const std::string& owner_user_id,
-        const std::string& file_id,
-        std::time_t expires_at,
-        CreatedShare& out_share);
-    bool list_shares(const std::string& owner_user_id,
-        const std::string& file_id,
-        std::vector<db::Share>& out_shares);
+    CreateShareResult create_share(const std::string& owner_user_id, const std::string& file_id, std::time_t expires_at, CreatedShare& out_share);
+    bool list_shares(const std::string& owner_user_id, const std::string& file_id, std::vector<db::Share>& out_shares);
     bool find_shared_file(const std::string& token, db::File& out_file);
-    RevokeShareResult revoke_share(const std::string& owner_user_id,
-        const std::string& file_id,
-        const std::string& share_id);
+    RevokeShareResult revoke_share(const std::string& owner_user_id, const std::string& file_id, const std::string& share_id);
 
 private:
     soci::connection_pool& pool_;

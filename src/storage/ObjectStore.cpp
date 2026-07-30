@@ -143,7 +143,7 @@ CommitResult ObjectStore::commit(const std::string& tempPath, const std::string&
     throw std::system_error(linkError, std::generic_category(), tempPath);
 }
 
-std::string ObjectStore::get_object_key(const std::string& contentHash) const {
+std::string ObjectStore::get_object_key(const std::string& contentHash) {
     if (!is_valid_hash(contentHash)) {
         throw std::invalid_argument("内容摘要必须是 64 位小写十六进制字符串");
     }
@@ -154,7 +154,7 @@ std::string ObjectStore::get_object_key(const std::string& contentHash) const {
 }
 
 std::string ObjectStore::get_object_path(const std::string& contentHash) const {
-    return join_path(join_path(storageRoot_, "objects"), get_object_key(contentHash));
+    return join_path(join_path(storageRoot_, "objects"), ObjectStore::get_object_key(contentHash));
 }
 
 } // namespace filelink

@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件与上传协议响应 View：构造内部下载和 Tus 协议响应。
+// Tus 上传协议响应 View：构造上传控制接口的响应。
 // 站点页面与健康检查响应由 site/SiteResponseView 负责。
 // ============================================================================
 
@@ -16,9 +16,6 @@ struct UploadSession;
 
 class ApiResponseView {
 public:
-    static HttpResponse download_redirect(const std::string& objectKey,
-        const std::string& displayName);
-
     static HttpResponse tus_options();
     static HttpResponse tus_head(uint64_t offset, uint64_t length);
     static HttpResponse tus_created(const std::string& uploadIdHex, const std::string& host);

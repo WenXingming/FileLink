@@ -6,6 +6,8 @@
 #include "redis/UserSessionCache.h"
 #include "files/FileApiRouter.h"
 #include "files/FileService.h"
+#include "downloads/DownloadApiRouter.h"
+#include "downloads/DownloadService.h"
 #include "shares/ShareApiRouter.h"
 #include "shares/ShareService.h"
 #include "site/SiteRouter.h"
@@ -91,16 +93,19 @@ int main(int argc, char* argv[]) {
         filelink::AuthService authService(mysqlPool, &redisSessionCache);
         filelink::FileService fileService(mysqlPool);
         filelink::ShareService shareService(mysqlPool);
+        filelink::DownloadService downloadService(fileService, shareService);
         
         // 挂载 API 路由模块
         filelink::SiteRouter siteRouter(server, staticFileService);
         siteRouter.register_routes();
         filelink::AuthApiRouter authRouter(server, authService);
         authRouter.register_routes();
-        filelink::ShareApiRouter shareApiRouter(server, shareService, objectStore, authService);
-        shareApiRouter.register_public_routes();
-        filelink::FileApiRouter fileRouter(server, fileService, objectStore, authService, shareApiRouter);
+        filelink::FileApiRouter fileRouter(server, fileService, authService);
         fileRouter.register_routes();
+        filelink::ShareApiRouter shareRouter(server, shareService, authService);
+        shareRouter.register_routes();
+        filelink::DownloadApiRouter downloadRouter(server, downloadService, authService);
+        downloadRouter.register_routes();
         filelink::UploadApiRouter uploadRouter(server, uploadService, authService);
         uploadRouter.register_routes();
 

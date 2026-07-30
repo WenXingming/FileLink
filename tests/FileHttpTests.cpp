@@ -12,17 +12,6 @@
 
 namespace {
 
-TEST(FileRequestParserTest, ParsesDownloadFileId) {
-    HttpRequest request;
-    request.set_method("GET");
-    request.set_path("/files/646f776e6c6f61642d66696c65303030/download");
-
-    std::string file_id;
-
-    EXPECT_TRUE(filelink::FileRequestParser::parse_download_file_id(request, file_id));
-    EXPECT_EQ(file_id, "download-file000");
-}
-
 TEST(FileRequestParserTest, ParsesFileId) {
     HttpRequest request;
     request.set_method("DELETE");
@@ -36,12 +25,12 @@ TEST(FileRequestParserTest, ParsesFileId) {
 
 TEST(FileRequestParserTest, RejectsMalformedFilePath) {
     HttpRequest request;
-    request.set_method("GET");
-    request.set_path("/files/646F776E6C6F61642D66696C65303030/download");
+    request.set_method("DELETE");
+    request.set_path("/files/616C6963652D66696C652D6964303031");
 
     std::string file_id;
 
-    EXPECT_FALSE(filelink::FileRequestParser::parse_download_file_id(request, file_id));
+    EXPECT_FALSE(filelink::FileRequestParser::parse_file_id(request, file_id));
 }
 
 TEST(FileResponseViewTest, BuildsFileList) {

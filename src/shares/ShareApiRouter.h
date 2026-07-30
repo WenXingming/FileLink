@@ -1,43 +1,35 @@
+// ============================================================================
+// Shares HTTP Controller：注册分享创建、列表和撤销接口。
+// 只编排请求解析、认证、ShareService 和响应 View。
+// ============================================================================
+
 #pragma once
 
-#include "tudou/http/HttpServer.h"
-#include "tudou/http/HttpResponse.h"
+#include <string>
+
+class HttpRequest;
+class HttpResponse;
+class HttpServer;
 
 namespace filelink {
 
 class AuthService;
 class ShareService;
-class ObjectStore;
 
-// ========================================================================
-// ShareApiRouter：处理分享管理与公开下载 HTTP 请求。
-// ========================================================================
 class ShareApiRouter {
-    friend class ShareApiTest;
-
 public:
-    ShareApiRouter(HttpServer& server, ShareService& share_service, const ObjectStore& object_store,
-        AuthService& auth_service)
-        : server_(server), share_service_(share_service), object_store_(object_store),
-          auth_service_(auth_service) {}
+    ShareApiRouter(HttpServer& server, ShareService& share_service, AuthService& auth_service);
 
-    void register_public_routes();
-
-    // 请求属于分享管理接口时返回 true，并始终写入响应。
-    bool handle_management_request(const HttpRequest& request, HttpResponse& response);
+    void register_routes();
 
 private:
-    void handle_create(const HttpRequest& request, HttpResponse& response,
-        const std::string& file_id);
-    void handle_list(const HttpRequest& request, HttpResponse& response,
-        const std::string& file_id);
-    void handle_revoke(const HttpRequest& request, HttpResponse& response,
-        const std::string& file_id, const std::string& share_id);
-    void handle_public_download(const HttpRequest& request, HttpResponse& response);
+    void handle_create(const HttpRequest& request, HttpResponse& response, const std::string& file_id);
+    void handle_list(const HttpRequest& request, HttpResponse& response, const std::string& file_id);
+    void handle_revoke(const HttpRequest& request, HttpResponse& response, const std::string& file_id, const std::string& share_id);
 
+private:
     HttpServer& server_;
     ShareService& share_service_;
-    const ObjectStore& object_store_;
     AuthService& auth_service_;
 };
 

@@ -448,7 +448,7 @@ function renderFiles(files, emptyMessage) {
         return `<tr><td><div class="table-file-name-cell">${getFileIconSvg(file.name)}
             <span class="table-file-name-text" title="${name}">${name}</span></div></td>
             <td><div class="table-actions">
-            <a href="/files/${fileId}/download" class="table-action-btn btn-download" title="下载">
+            <a href="/downloads/private/${fileId}" class="table-action-btn btn-download" title="下载">
                 <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 <span>下载</span>
             </a>
@@ -592,7 +592,7 @@ async function loadShares() {
     if (!sharingFile) return;
     shareListStatus.textContent = '加载中…';
     try {
-        const response = await fetch(`/files/${sharingFile.id}/shares`);
+        const response = await fetch(`/shares/${sharingFile.id}`);
         if (response.status === 401) throw new Error('登录已过期');
         if (!response.ok) throw new Error('无法读取分享链接');
         const body = await response.json();
@@ -625,14 +625,14 @@ async function createShare() {
     if (!sharingFile) return;
     createShareBtn.disabled = true;
     try {
-        const response = await fetch(`/files/${sharingFile.id}/shares`, {
+        const response = await fetch(`/shares/${sharingFile.id}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({expires_in_seconds: Number(shareExpiry.value)})
         });
         const body = await response.json().catch(() => ({}));
         if (!response.ok || !body.token) throw new Error(body.message || '创建失败，请重试');
-        shareLinkInput.value = `${window.location.origin}/shares/${body.token}/download`;
+        shareLinkInput.value = `${window.location.origin}/downloads/shared/${body.token}`;
         shareNewLink.hidden = false;
         await loadShares();
         showToast('公开分享链接已成功创建', 'success');
@@ -647,7 +647,7 @@ async function createShare() {
 async function revokeShare(shareId) {
     if (!sharingFile || !confirm('撤销后该公开链接将立即失效，确定继续吗？')) return;
     try {
-        const response = await fetch(`/files/${sharingFile.id}/shares/${shareId}`, {method: 'DELETE'});
+        const response = await fetch(`/shares/${sharingFile.id}/${shareId}`, {method: 'DELETE'});
         if (!response.ok) throw new Error('撤销失败，请重试');
         await loadShares();
         showToast('分享链接已成功撤销', 'success');
@@ -1019,7 +1019,7 @@ function pollTusStatus(sessionUrl) {
                         const res = JSON.parse(xhr.responseText);
                         if (res.state === 'COMPLETED') {
                             if (res.file_id) {
-                                resolve(`/files/${res.file_id}/download`);
+                                resolve(`/downloads/private/${res.file_id}`);
                             } else {
                                 reject(new Error('分片上传会话已完成但文件 ID 缺失'));
                             }
@@ -1231,7 +1231,7 @@ function initTerminalAnimation() {
         { type: 'comment', text: '# 计算 Blake3 哈希进行秒传探测 (Checking hash)...' },
         { type: 'success', text: 'Instant Upload Success! File deduped on server.' },
         { type: 'cmd', text: 'echo "Private download:"' },
-        { type: 'link', text: 'http://filelink.dev/files/2f7c9e/download' }
+        { type: 'link', text: 'http://filelink.dev/downloads/private/2f7c9e' }
     ];
     
     let currentLineIndex = 0;

@@ -1,23 +1,21 @@
 // ============================================================================
-// 文件响应 View：把文件用例结果表示为状态码和 JSON。
-// 不查询文件、不验证权限，也不处理文件下载。
+// 下载响应 View：把下载目标表示为 Nginx 内部重定向或 JSON 错误响应。
+// 不查询文件、不验证权限，也不读取文件内容。
 // ============================================================================
 
 #pragma once
 
-#include "database/File.h"
-
 #include <string>
-#include <vector>
 
 class HttpResponse;
 
 namespace filelink {
 
-class FileResponseView {
+struct DownloadTarget;
+
+class DownloadResponseView {
 public:
-    static HttpResponse file_list(const std::vector<db::File>& files);
-    static HttpResponse deleted();
+    static HttpResponse file(const DownloadTarget& target);
     static HttpResponse unauthorized();
     static HttpResponse not_found();
     static HttpResponse server_error(const std::string& message);

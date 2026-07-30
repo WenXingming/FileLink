@@ -20,10 +20,10 @@ public:
     void register_routes();
 
 private:
-    void handle_health(const HttpRequest& request, HttpResponse& response);
     void handle_index(const HttpRequest& request, HttpResponse& response);
     void handle_static(const HttpRequest& request, HttpResponse& response);
 
+private:
     HttpServer& server_;
     StaticFileService& static_file_service_;
 };

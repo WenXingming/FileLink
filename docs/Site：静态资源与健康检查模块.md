@@ -42,7 +42,7 @@ HttpResponse
 | ---------------------- | ----------------- | ---------- | ---------------------------- |
 | `GET /`              | `handle_index`  | `200 OK` | 返回`web-root/index.html`  |
 | `GET /index.html`    | `handle_index`  | `200 OK` | 返回同一个首页文件         |
-| `GET /health`        | `handle_health` | `200 OK` | 返回进程活性状态           |
+| `GET /health`        | 注册处直接响应  | `200 OK` | 返回进程活性状态           |
 | `/static/*` 前缀路由 | `handle_static` | `200 OK` | 返回请求路径对应的静态资源 |
 
 前三条是按 HTTP 方法和路径匹配的精确路由。Tudou 当前的前缀路由只匹配路径，因此 `/static/*` 本身不限制 HTTP 方法。
@@ -138,7 +138,7 @@ Service 不知道 HTTP 状态码。它只通过返回内容或抛出异常报告
 
 Site 模块会把静态资源完整读入进程内存，适合 HTML、CSS、JavaScript 和小图片等前端资源。它不是用户文件下载链路。
 
-FileLink 的大文件下载由 File/Share 模块返回 `X-Accel-Redirect`，再由 Nginx 读取对象文件并发送；不会经过 `StaticFileService`。因此不要用 `/static/*` 提供用户上传的大文件。
+FileLink 的大文件下载由 Downloads 模块返回 `X-Accel-Redirect`，再由 Nginx 读取对象文件并发送；不会经过 `StaticFileService`。因此不要用 `/static/*` 提供用户上传的大文件。
 
 ## View：SiteResponseView
 

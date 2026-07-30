@@ -31,26 +31,24 @@ HttpResponse
 
 这张图表达的是数据阅读顺序。实际控制关系由 Router 发起：Router 调用 Parser，随后调用 Service，最后选择一个 View 响应。
 
-
-| 文件                                                   | 单一职责                                     |
-| -------------------------------------------------------- | ---------------------------------------------- |
-| [`AuthRequestParser`](../src/auth/AuthRequestParser.h) | 把`HttpRequest` 转换为用户名、密码或会话令牌 |
-| [`AuthApiRouter`](../src/auth/AuthApiRouter.h)         | 注册认证端点并编排 Parser、Service 和 View   |
-| [`AuthService`](../src/auth/AuthService.h)             | 编排用户、密码、会话、MySQL 和 Redis 业务    |
-| [`AuthResponseView`](../src/auth/AuthResponseView.h)   | 把认证结果表示为`HttpResponse`               |
-| [`PasswordHasher`](../src/auth/PasswordHasher.h)       | 封装 libsodium Argon2id 密码哈希             |
+| 文件 | 单一职责 |
+| --- | --- |
+| [`AuthRequestParser`](../src/auth/AuthRequestParser.h) | 把 `HttpRequest` 转换为用户名、密码或会话令牌 |
+| [`AuthApiRouter`](../src/auth/AuthApiRouter.h) | 注册认证端点并编排 Parser、Service 和 View |
+| [`AuthService`](../src/auth/AuthService.h) | 编排用户、密码、会话、MySQL 和 Redis 业务 |
+| [`AuthResponseView`](../src/auth/AuthResponseView.h) | 把认证结果表示为 `HttpResponse` |
+| [`PasswordHasher`](../src/auth/PasswordHasher.h) | 封装 libsodium Argon2id 密码哈希 |
 
 没有额外的认证器、接口、工厂或 DI 容器。`main.cpp` 创建一个具体的 `AuthService`，再把它注入需要认证能力的 Router。
 
 ## HTTP 接口
 
-
-| 方法与路径            | 输入                      | 成功响应         | 作用                      |
-| ----------------------- | --------------------------- | ------------------ | --------------------------- |
-| `POST /auth/register` | JSON 用户名和密码         | `201 Created`    | 创建用户和初始会话        |
-| `POST /auth/login`    | JSON 用户名和密码         | `200 OK`         | 校验密码并创建新会话      |
-| `GET /auth/me`        | `filelink_session` Cookie | `200 OK`         | 查询当前登录用户          |
-| `POST /auth/logout`   | 可选 Session Cookie       | `204 No Content` | 删除指定会话并清空 Cookie |
+| 方法与路径 | 输入 | 成功响应 | 作用 |
+| --- | --- | --- | --- |
+| `POST /auth/register` | JSON 用户名和密码 | `201 Created` | 创建用户和初始会话 |
+| `POST /auth/login` | JSON 用户名和密码 | `200 OK` | 校验密码并创建新会话 |
+| `GET /auth/me` | `filelink_session` Cookie | `200 OK` | 查询当前登录用户 |
+| `POST /auth/logout` | 可选 Session Cookie | `204 No Content` | 删除指定会话并清空 Cookie |
 
 注册、登录和当前用户成功时，JSON 只返回公开信息：
 
@@ -89,7 +87,7 @@ JSON 无法解析、字段缺失或字段不是字符串时返回 `false`。Pars
 Cookie: theme=dark; filelink_session=<64 位十六进制令牌>
 ```
 
-缺少会话 Cookie、值为空或出现多个同名 Cookie 时返回 `false`。这个函数也被 File、Share 和 Upload Router 复用，因此会话 Cookie 的格式只在一处维护。
+缺少会话 Cookie、值为空或出现多个同名 Cookie 时返回 `false`。这个函数也被 File、Share、Download 和 Upload Router 复用，因此会话 Cookie 的格式只在一处维护。
 
 Parser 不验证 64 位文本是否合法，也不查询会话；这些属于 `AuthService`。
 
@@ -240,12 +238,11 @@ Redis 未启用、连接失败、键不存在或值不可解析时，都不会�
 
 ## MySQL 与 Redis 的数据分工
 
-
-| 位置                 | 保存内容                                             | 生命周期                 | 作用                     |
-| ---------------------- | ------------------------------------------------------ | -------------------------- | -------------------------- |
-| 浏览器 Cookie        | 原始令牌的 64 位十六进制文本                         | 7 天或注销清除           | 客户端提交的会话凭证     |
-| MySQL`user_sessions` | 32 字节`token_hash`、16 字节 `user_id`、过期时间     | 7 天、主动注销或定时清理 | 会话持久化记录           |
-| Redis                | `filelink:session:<token_hash_hex> → <user_id_hex>` | MySQL 剩余有效时间       | 加速令牌到用户 ID 的定位 |
+| 位置 | 保存内容 | 生命周期 | 作用 |
+| --- | --- | --- | --- |
+| 浏览器 Cookie | 原始令牌的 64 位十六进制文本 | 7 天或注销清除 | 客户端提交的会话凭证 |
+| MySQL `user_sessions` | 32 字节 `token_hash`、16 字节 `user_id`、过期时间 | 7 天、主动注销或定时清理 | 会话持久化记录 |
+| Redis | `filelink:session:<token_hash_hex> → <user_id_hex>` | MySQL 剩余有效时间 | 加速令牌到用户 ID 的定位 |
 
 [`UserSessionDao`](../src/database/UserSession.h) 只负责创建、查询未过期会话和删除会话。有效性查询使用 `expires_at > NOW()`。
 
@@ -259,12 +256,11 @@ MySQL migration 还创建了每日执行的 `cleanup_expired_user_sessions` 事�
 
 ## 三种哈希不要混淆
 
-
-| 用途         | 算法                                     | 原因                                                       |
-| -------------- | ------------------------------------------ | ------------------------------------------------------------ |
-| 密码存储     | Argon2id                                 | 密码熵较低，需要慢速、内存困难的密码哈希抵抗离线猜测       |
-| 会话令牌索引 | libsodium`crypto_generichash`（BLAKE2b） | 令牌由服务端随机生成，哈希用于持久化索引和避免保存原始凭证 |
-| 文件内容寻址 | BLAKE3                                   | 面向大文件流式计算、去重和物理对象定位                     |
+| 用途 | 算法 | 原因 |
+| --- | --- | --- |
+| 密码存储 | Argon2id | 密码熵较低，需要慢速、内存困难的密码哈希抵抗离线猜测 |
+| 会话令牌索引 | libsodium `crypto_generichash`（BLAKE2b） | 令牌由服务端随机生成，哈希用于持久化索引和避免保存原始凭证 |
+| 文件内容寻址 | BLAKE3 | 面向大文件流式计算、去重和物理对象定位 |
 
 密码哈希由 [`PasswordHasher.cpp`](../src/auth/PasswordHasher.cpp) 独立封装，因此 `AuthService` 不需要知道 Argon2id 参数和 libsodium C API 细节。
 
@@ -277,12 +273,13 @@ MySQL connection_pool ─┐
                       ├── AuthService
 UserSessionCache ─────┘
                            │
-         ┌─────────────────┼─────────────────┐
-         ▼                 ▼                 ▼
- AuthApiRouter       File/Share Router   UploadApiRouter
+         ┌────────────┬────┴─────┬────────────┐
+         ▼            ▼          ▼            ▼
+ AuthApiRouter   File/Share   Download    UploadApiRouter
+                    Router      Router
 ```
 
-`AuthApiRouter` 使用完整的 Parser → Service → View 流程。File、Share 和 Upload Router 复用 `AuthRequestParser::parse_session_token` 与 `AuthService::current_user`，但保留各自协议需要的响应格式，例如 Upload Router 使用 Tus 错误响应。
+`AuthApiRouter` 使用完整的 Parser → Service → View 流程。File、Share、Download 和 Upload Router 复用 `AuthRequestParser::parse_session_token` 与 `AuthService::current_user`，但保留各自协议需要的响应格式，例如 Download Router 使用下载 JSON 错误，Upload Router 使用 Tus 错误响应。
 
 ## 结果类型
 
@@ -297,14 +294,13 @@ Service 不返回 HTTP 状态码，而是返回领域结果：
 
 ## 测试地图
 
-
-| 测试                                                            | 覆盖内容                                     |
-| ----------------------------------------------------------------- | ---------------------------------------------- |
-| [`PasswordHasherTests.cpp`](../tests/PasswordHasherTests.cpp)   | 密码哈希、正确密码、错误密码和损坏哈希       |
-| [`AuthServiceTest.cpp`](../tests/AuthServiceTest.cpp)           | 注册、登录、会话、禁用用户、Redis 回退和注销 |
-| [`AuthApiTest.cpp`](../tests/AuthApiTest.cpp)                   | 四个认证端点、JSON、状态码和 Cookie          |
-| [`UserSessionCacheTest.cpp`](../tests/UserSessionCacheTest.cpp) | Redis 会话映射的写入、读取和删除             |
-| File、Share、Tus API 测试                                       | 受保护业务接口对认证模块的复用               |
+| 测试 | 覆盖内容 |
+| --- | --- |
+| [`PasswordHasherTests.cpp`](../tests/PasswordHasherTests.cpp) | 密码哈希、正确密码、错误密码和损坏哈希 |
+| [`AuthServiceTest.cpp`](../tests/AuthServiceTest.cpp) | 注册、登录、会话、禁用用户、Redis 回退和注销 |
+| [`AuthApiTest.cpp`](../tests/AuthApiTest.cpp) | 四个认证端点、JSON、状态码和 Cookie |
+| [`UserSessionCacheTest.cpp`](../tests/UserSessionCacheTest.cpp) | Redis 会话映射的写入、读取和删除 |
+| File、Share、Download、Tus API 测试 | 受保护业务接口对认证模块的复用 |
 
 ## 推荐代码阅读顺序
 

@@ -40,7 +40,8 @@ void AuthApiRouter::handle_register(const HttpRequest& request, HttpResponse& re
     }
 
     AuthenticatedSession session;
-    switch (auth_service_.register_user(username, password, session)) {
+    const RegisterResult result = auth_service_.register_user(username, password, session);
+    switch (result) {
     case RegisterResult::Success:
         response = AuthResponseView::registered(session);
         return;
@@ -68,7 +69,8 @@ void AuthApiRouter::handle_login(const HttpRequest& request, HttpResponse& respo
     }
 
     AuthenticatedSession session;
-    switch (auth_service_.login_user(username, password, session)) {
+    const LoginResult result = auth_service_.login_user(username, password, session);
+    switch (result) {
     case LoginResult::Success:
         response = AuthResponseView::logged_in(session);
         return;
@@ -89,7 +91,8 @@ void AuthApiRouter::handle_current_user(const HttpRequest& request, HttpResponse
     }
 
     AuthenticatedUser user;
-    switch (auth_service_.current_user(session_token, user)) {
+    const CurrentUserResult result = auth_service_.current_user(session_token, user);
+    switch (result) {
     case CurrentUserResult::Success:
         response = AuthResponseView::current_user(user);
         return;
@@ -109,7 +112,8 @@ void AuthApiRouter::handle_logout(const HttpRequest& request, HttpResponse& resp
         return;
     }
 
-    if (!auth_service_.logout(session_token)) {
+    const bool logged_out = auth_service_.logout(session_token);
+    if (!logged_out) {
         response = AuthResponseView::error(500, "Internal Server Error", "Logout failed");
         return;
     }

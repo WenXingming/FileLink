@@ -140,10 +140,26 @@ fi
 
 echo "Uploaded file: $file_id"
 
-# 3. 通过私有文件地址下载文件
+# 3. 验证 Files 列表路由和认证
+files_response="$("$curl" --noproxy "*" --silent --show-error \
+    -H "Cookie: $session_cookie" "$base_url/files")"
+if [[ "$files_response" != *"\"file_id\":\"$file_id\""* \
+    || "$files_response" != *"\"name\":\"download.txt\""* ]]; then
+    echo "Uploaded file was not returned by GET /files: $files_response" >&2
+    exit 1
+fi
+
+unauthenticated_list_status="$("$curl" --noproxy "*" --silent --show-error \
+    --write-out "%{http_code}" -o /dev/null "$base_url/files")"
+if [[ "$unauthenticated_list_status" != "401" ]]; then
+    echo "Expected 401 for unauthenticated file list, got: $unauthenticated_list_status" >&2
+    exit 1
+fi
+
+# 4. 通过私有文件地址下载文件
 downloaded_data="$("$curl" --noproxy "*" --silent --show-error \
     -H "Cookie: $session_cookie" \
-    "$base_url/files/$file_id/download")"
+    "$base_url/downloads/private/$file_id")"
 
 if [[ "$downloaded_data" != "$test_data" ]]; then
     echo "Download mismatch!" >&2
@@ -152,11 +168,11 @@ if [[ "$downloaded_data" != "$test_data" ]]; then
     exit 1
 fi
 
-# 4. 验证 Nginx 提供字节范围下载
+# 5. 验证 Nginx 提供字节范围下载
 range_status="$("$curl" --noproxy "*" --silent --show-error \
     --range 0-4 --dump-header "$range_headers" --output "$range_body" \
     --write-out "%{http_code}" -H "Cookie: $session_cookie" \
-    "$base_url/files/$file_id/download")"
+    "$base_url/downloads/private/$file_id")"
 range_data="$(<"$range_body")"
 content_range="$(awk -F': ' 'tolower($1) == "content-range" { sub(/\r$/, "", $2); print $2; exit }' "$range_headers")"
 
@@ -169,7 +185,7 @@ if [[ "$range_status" != "206" || "$range_data" != "Hello" \
     exit 1
 fi
 
-# 5. 验证客户端不能绕过授权直接访问内部对象地址
+# 6. 验证客户端不能绕过授权直接访问内部对象地址
 object_path="$(find "$storage_dir/objects" -type f -print -quit)"
 if [[ -z "$object_path" ]]; then
     echo "Uploaded object was not found in storage" >&2
@@ -184,31 +200,80 @@ if [[ "$direct_object_status" != "404" ]]; then
     exit 1
 fi
 
-# 6. 验证私有下载拒绝未认证请求
+# 7. 验证私有下载拒绝未认证请求
 unauthenticated_status="$("$curl" --noproxy "*" --silent --show-error --write-out "%{http_code}" -o /dev/null \
-    "$base_url/files/$file_id/download")"
+    "$base_url/downloads/private/$file_id")"
 if [[ "$unauthenticated_status" != "401" ]]; then
     echo "Expected 401 for unauthenticated download, got: $unauthenticated_status" >&2
     exit 1
 fi
 
-# 7. 创建公开分享并在无认证状态下通过 Nginx 下载
+# 8. 创建、查看和使用公开分享
 share_response="$("$curl" --noproxy "*" --silent --show-error -X POST \
     -H "Cookie: $session_cookie" -H "Content-Type: application/json" \
     -d '{"expires_in_seconds":3600}' \
-    "$base_url/files/$file_id/shares")"
+    "$base_url/shares/$file_id")"
+share_id="$(echo "$share_response" | grep -o '"share_id":"[^"]*' | cut -d'"' -f4 || true)"
 share_token="$(echo "$share_response" | grep -o '"token":"[^"]*' | cut -d'"' -f4 || true)"
-if [[ -z "$share_token" ]]; then
+if [[ -z "$share_id" || -z "$share_token" ]]; then
     echo "Failed to create public share: $share_response" >&2
     exit 1
 fi
 
+shares_response="$("$curl" --noproxy "*" --silent --show-error \
+    -H "Cookie: $session_cookie" "$base_url/shares/$file_id")"
+if [[ "$shares_response" != *"\"share_id\":\"$share_id\""* ]]; then
+    echo "Created share was not returned by GET /shares: $shares_response" >&2
+    exit 1
+fi
+
+unauthenticated_shares_status="$("$curl" --noproxy "*" --silent --show-error \
+    --write-out "%{http_code}" -o /dev/null "$base_url/shares/$file_id")"
+if [[ "$unauthenticated_shares_status" != "401" ]]; then
+    echo "Expected 401 for unauthenticated share list, got: $unauthenticated_shares_status" >&2
+    exit 1
+fi
+
 shared_data="$("$curl" --noproxy "*" --silent --show-error \
-    "$base_url/shares/$share_token/download")"
+    "$base_url/downloads/shared/$share_token")"
 if [[ "$shared_data" != "$test_data" ]]; then
     echo "Public share download mismatch!" >&2
     echo "Expected: $test_data" >&2
     echo "Actual: $shared_data" >&2
+    exit 1
+fi
+
+# 9. 撤销分享，并确认公开下载失效
+revoke_status="$("$curl" --noproxy "*" --silent --show-error -X DELETE \
+    -H "Cookie: $session_cookie" --write-out "%{http_code}" -o /dev/null \
+    "$base_url/shares/$file_id/$share_id")"
+if [[ "$revoke_status" != "204" ]]; then
+    echo "Expected 204 for share revocation, got: $revoke_status" >&2
+    exit 1
+fi
+
+revoked_download_status="$("$curl" --noproxy "*" --silent --show-error \
+    --write-out "%{http_code}" -o /dev/null \
+    "$base_url/downloads/shared/$share_token")"
+if [[ "$revoked_download_status" != "404" ]]; then
+    echo "Expected 404 after share revocation, got: $revoked_download_status" >&2
+    exit 1
+fi
+
+# 10. 删除文件，并确认私有下载失效
+delete_status="$("$curl" --noproxy "*" --silent --show-error -X DELETE \
+    -H "Cookie: $session_cookie" --write-out "%{http_code}" -o /dev/null \
+    "$base_url/files/$file_id")"
+if [[ "$delete_status" != "204" ]]; then
+    echo "Expected 204 for file deletion, got: $delete_status" >&2
+    exit 1
+fi
+
+deleted_download_status="$("$curl" --noproxy "*" --silent --show-error \
+    -H "Cookie: $session_cookie" --write-out "%{http_code}" -o /dev/null \
+    "$base_url/downloads/private/$file_id")"
+if [[ "$deleted_download_status" != "404" ]]; then
+    echo "Expected 404 after file deletion, got: $deleted_download_status" >&2
     exit 1
 fi
 

@@ -79,7 +79,7 @@
                     <div class="line-comment"># 计算 Blake3 哈希进行秒传探测 (Checking hash)...</div>
                     <div class="line-success">Instant Upload Success! File deduped on server.</div>
                     <div class="line"><span class="cmd-prompt">$</span> echo "Private download:"</div>
-                    <div class="line-link">http://filelink.dev/files/&lt;file_id&gt;/download</div>
+                    <div class="line-link">http://filelink.dev/downloads/private/&lt;file_id&gt;</div>
                 </div>
             </div>
         </section>
@@ -297,8 +297,8 @@
                             <p>登录后，从“我的文件”取得文件 ID；浏览器请求会自动携带会话 Cookie。</p>
                             <div class="code-block-wrapper">
                                 <pre><code>curl -b "filelink_session=&lt;session_token&gt;" -OJ \\
-  http://127.0.0.1:18081/files/&lt;file_id&gt;/download</code></pre>
-                                <button class="copy-code-btn" data-code="curl -b 'filelink_session=&lt;session_token&gt;' -OJ http://127.0.0.1:18081/files/&lt;file_id&gt;/download" type="button">复制</button>
+  http://127.0.0.1:18081/downloads/private/&lt;file_id&gt;</code></pre>
+                                <button class="copy-code-btn" data-code="curl -b 'filelink_session=&lt;session_token&gt;' -OJ http://127.0.0.1:18081/downloads/private/&lt;file_id&gt;" type="button">复制</button>
                             </div>
                         </div>
                     </div>

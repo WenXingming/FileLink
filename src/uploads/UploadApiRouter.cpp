@@ -104,7 +104,8 @@ bool UploadApiRouter::authenticate_upload_request(const HttpRequest& req, Authen
         return false;
     }
 
-    switch (auth_service_.current_user(session_token, out_user)) {
+    const CurrentUserResult result = auth_service_.current_user(session_token, out_user);
+    switch (result) {
     case CurrentUserResult::Success:
         return true;
     case CurrentUserResult::InvalidSession:
@@ -136,7 +137,9 @@ void UploadApiRouter::handle_tus_head(const HttpRequest& req, HttpResponse& resp
     uint64_t totalSize = 0;
 
     try {
-        if (!uploadService_.get_session_progress(user.user_id, upload_id, offset, totalSize)) {
+        const bool found = uploadService_.get_session_progress(
+            user.user_id, upload_id, offset, totalSize);
+        if (!found) {
             response = ApiResponseView::tus_error(404, "Not Found", "Upload Session Not Found");
             return;
         }
@@ -179,7 +182,9 @@ void UploadApiRouter::handle_tus_create(const HttpRequest& req, HttpResponse& re
 
     try {
         std::string uploadIdHex;
-        if (!uploadService_.create_session(user.user_id, totalSize, metadata, host, uploadIdHex)) {
+        const bool created = uploadService_.create_session(
+            user.user_id, totalSize, metadata, host, uploadIdHex);
+        if (!created) {
             response = ApiResponseView::tus_error(500, "Internal Server Error", "Failed to create session");
             return;
         }
@@ -222,18 +227,18 @@ void UploadApiRouter::handle_tus_patch(const HttpRequest& req, HttpResponse& res
 
     try {
         uint64_t newOffset = 0;
-        const UploadChunkResult rc = uploadService_.write_session_chunk(user.user_id, upload_id,
+        const UploadChunkResult result = uploadService_.write_session_chunk(user.user_id, upload_id,
             clientOffset, req.get_body(), newOffset);
-        if (rc == UploadChunkResult::Success) {
+        if (result == UploadChunkResult::Success) {
             response = ApiResponseView::tus_patched(newOffset);
         }
-        else if (rc == UploadChunkResult::OffsetMismatch) {
+        else if (result == UploadChunkResult::OffsetMismatch) {
             response = ApiResponseView::tus_error(409, "Conflict", "Offset Mismatch");
         }
-        else if (rc == UploadChunkResult::InvalidChunkSize) {
+        else if (result == UploadChunkResult::InvalidChunkSize) {
             response = ApiResponseView::tus_error(400, "Bad Request", "Invalid Chunk Size or Range");
         }
-        else if (rc == UploadChunkResult::SessionNotFound) {
+        else if (result == UploadChunkResult::SessionNotFound) {
             response = ApiResponseView::tus_error(404, "Not Found", "Upload Session Not Found");
         }
         else {
@@ -263,7 +268,8 @@ void UploadApiRouter::handle_tus_get_session(const HttpRequest& req, HttpRespons
 
     try {
         db::UploadSession session;
-        if (!uploadService_.get_session(user.user_id, upload_id, session)) {
+        const bool found = uploadService_.get_session(user.user_id, upload_id, session);
+        if (!found) {
             response = ApiResponseView::tus_error(404, "Not Found", "Upload Session Not Found");
             return;
         }

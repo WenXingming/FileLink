@@ -1,5 +1,5 @@
 // ============================================================================
-// 文件与上传协议响应 View 实现：维护下载 Header 和 Tus 响应格式。
+// Tus 上传协议响应 View 实现：集中维护上传控制接口的响应格式。
 // 不处理站点页面、健康检查或请求解析。
 // ============================================================================
 
@@ -20,14 +20,6 @@ std::string hex_encode(const std::string& bytes) {
         stream << std::setw(2) << static_cast<int>(value);
     }
     return stream.str();
-}
-
-std::string download_name(const std::string& display_name) {
-    std::string name;
-    for (unsigned char value : display_name) {
-        name.push_back(value >= 32 && value < 127 && value != '"' && value != '\\' ? value : '_');
-    }
-    return name.empty() ? "download" : name;
 }
 
 std::string escape_json(const std::string& input) {
@@ -55,17 +47,6 @@ HttpResponse json_response(const std::string& body) {
 }
 
 } // namespace
-
-HttpResponse ApiResponseView::download_redirect(const std::string& objectKey,
-    const std::string& displayName) {
-    HttpResponse response;
-    response.set_status(200, "OK");
-    response.set_header("Content-Type", "application/octet-stream");
-    response.set_header("Content-Disposition",
-        "attachment; filename=\"" + download_name(displayName) + "\"");
-    response.set_header("X-Accel-Redirect", "/_filelink_objects/" + objectKey);
-    return response;
-}
 
 HttpResponse ApiResponseView::tus_options() {
     HttpResponse response;

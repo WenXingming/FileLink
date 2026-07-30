@@ -26,8 +26,8 @@ void SiteRouter::register_routes() {
     server_.add_get_route("/index.html", [this](const HttpRequest& request, HttpResponse& response) {
         handle_index(request, response);
     });
-    server_.add_get_route("/health", [this](const HttpRequest& request, HttpResponse& response) {
-        handle_health(request, response);
+    server_.add_get_route("/health", [](const HttpRequest&, HttpResponse& response) {
+        response = SiteResponseView::health_check();
     });
     server_.add_prefix_route("/static/", [this](const HttpRequest& request, HttpResponse& response) {
         handle_static(request, response);
@@ -42,10 +42,6 @@ void SiteRouter::handle_index(const HttpRequest&, HttpResponse& response) {
     } catch (const std::exception&) {
         response = SiteResponseView::not_found("index.html not found");
     }
-}
-
-void SiteRouter::handle_health(const HttpRequest&, HttpResponse& response) {
-    response = SiteResponseView::health_check();
 }
 
 void SiteRouter::handle_static(const HttpRequest& request, HttpResponse& response) {

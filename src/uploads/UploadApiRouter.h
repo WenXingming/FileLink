@@ -14,8 +14,7 @@ struct AuthenticatedUser;
 class UploadApiRouter {
     friend class TusControlApiTest;
 public:
-    UploadApiRouter(HttpServer& server, UploadService& upload_service,
-        AuthService& auth_service);
+    UploadApiRouter(HttpServer& server, UploadService& upload_service, AuthService& auth_service);
 
     void register_routes();
 
@@ -26,9 +25,9 @@ private:
     void handle_tus_head(const HttpRequest& req, HttpResponse& response);
     void handle_tus_get_session(const HttpRequest& req, HttpResponse& response);
     void handle_tus_terminate(const HttpRequest& req, HttpResponse& response);
-    bool authenticate_upload_request(const HttpRequest& req, AuthenticatedUser& out_user,
-        HttpResponse& response);
+    bool authenticate_upload_request(const HttpRequest& req, AuthenticatedUser& out_user, HttpResponse& response);
 
+private:
     HttpServer& server_;
     UploadService& uploadService_;
     AuthService& auth_service_;
